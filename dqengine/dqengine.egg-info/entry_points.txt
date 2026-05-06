@@ -1,0 +1,2 @@
+[console_scripts]
+dq = dqengine.cli.commands:app

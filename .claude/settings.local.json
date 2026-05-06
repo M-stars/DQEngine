@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Read(//c/Users/13033/AppData/Local/Programs/**)",
+      "Read(//d/PythonInstall/**)",
+      "Bash(dq version *)",
+      "Bash(dq profile *)",
+      "Bash(dq auto *)",
+      "Bash(dq validate *)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(rm -f cleaned_data.csv report.html profile.json)",
+      "Bash(python -m pytest tests/ -q)"
+    ]
+  }
+}

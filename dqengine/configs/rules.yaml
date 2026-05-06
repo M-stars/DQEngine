@@ -1,0 +1,27 @@
+# DQEngine Validation Rules
+# -----------------------------------------------------------
+# Rule types: min, max, regex, not_null, allowed_values
+#
+# Named regex patterns: email, phone, url, date
+# Custom regex patterns are also supported.
+
+columns:
+  age:
+    min: 0
+    max: 120
+
+  email:
+    regex: email
+
+  name:
+    not_null: true
+
+  gender:
+    allowed_values:
+      - Male
+      - Female
+      - Other
+
+  salary:
+    min: 0
+    max: 500000
