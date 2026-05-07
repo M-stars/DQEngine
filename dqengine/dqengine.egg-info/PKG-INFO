@@ -1,16 +1,18 @@
 Metadata-Version: 2.4
 Name: dqengine
-Version: 0.1.0
+Version: 0.2.0
 Summary: A lightweight, automated, developer-friendly data quality governance framework
 Author: DQEngine Team
 License: MIT
-Keywords: data-quality,data-governance,data-profiling,data-cleaning,cli
-Classifier: Development Status :: 3 - Alpha
+Keywords: data-quality,data-governance,data-profiling,data-cleaning,cli,semantic,pipeline
+Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: Intended Audience :: Science/Research
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Scientific/Engineering :: Information Analysis
@@ -25,12 +27,30 @@ Requires-Dist: pydantic>=2.5.0
 Requires-Dist: pyyaml>=6.0
 Requires-Dist: jinja2>=3.1.0
 Requires-Dist: openpyxl>=3.1.0
+Requires-Dist: pyarrow>=14.0.0
+Requires-Dist: plotly>=5.18.0
+Requires-Dist: tqdm>=4.66.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0; extra == "dev"
 Requires-Dist: pytest-cov>=5.0; extra == "dev"
 Requires-Dist: black>=24.0; extra == "dev"
 Requires-Dist: ruff>=0.3.0; extra == "dev"
 Requires-Dist: mypy>=1.8.0; extra == "dev"
+Requires-Dist: isort>=5.13.0; extra == "dev"
+Requires-Dist: flake8>=7.0.0; extra == "dev"
+Requires-Dist: pre-commit>=3.6.0; extra == "dev"
+Provides-Extra: db
+Requires-Dist: sqlalchemy>=2.0.0; extra == "db"
+Provides-Extra: all
+Requires-Dist: pytest>=8.0; extra == "all"
+Requires-Dist: pytest-cov>=5.0; extra == "all"
+Requires-Dist: black>=24.0; extra == "all"
+Requires-Dist: ruff>=0.3.0; extra == "all"
+Requires-Dist: mypy>=1.8.0; extra == "all"
+Requires-Dist: isort>=5.13.0; extra == "all"
+Requires-Dist: flake8>=7.0.0; extra == "all"
+Requires-Dist: pre-commit>=3.6.0; extra == "all"
+Requires-Dist: sqlalchemy>=2.0.0; extra == "all"
 Dynamic: license-file
 
 <p align="center">

@@ -29,8 +29,8 @@ class TestDataLoader:
         loader = DataLoader()
         df = loader.load(SAMPLE_CSV)
         assert isinstance(df, pd.DataFrame)
-        assert len(df) == 25
-        assert len(df.columns) == 8
+        assert len(df) == 9
+        assert len(df.columns) == 10
 
     def test_load_csv_gbk(self, tmp_path: Path) -> None:
         """Load a GBK-encoded CSV with fallback."""
@@ -50,10 +50,10 @@ class TestDataLoader:
 
     def test_unsupported_format(self, tmp_path: Path) -> None:
         """Raise ValueError for unsupported formats."""
-        file = tmp_path / "data.json"
-        file.write_text("{}")
+        file = tmp_path / "data.txt"
+        file.write_text("hello world")
         loader = DataLoader()
-        with pytest.raises(ValueError, match="Unsupported"):
+        with pytest.raises(ValueError, match="不支持"):
             loader.load(file)
 
     def test_load_excel(self, tmp_path: Path) -> None:

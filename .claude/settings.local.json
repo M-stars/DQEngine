@@ -10,7 +10,12 @@
       "Bash(dq validate *)",
       "Bash(python -m pytest tests/ -v)",
       "Bash(rm -f cleaned_data.csv report.html profile.json)",
-      "Bash(python -m pytest tests/ -q)"
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(dq semantic *)",
+      "Bash(dq plugins *)",
+      "Bash(dq doctor *)",
+      "Bash(dq pipeline *)",
+      "Bash(python *)"
     ]
   }
 }

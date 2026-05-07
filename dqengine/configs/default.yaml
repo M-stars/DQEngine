@@ -1,0 +1,50 @@
+# ============================================================================
+# DQEngine 默认配置文件
+# ============================================================================
+# 使用方式:
+#   dq auto data.csv --config configs/default.yaml
+#   dq batch ./datasets --config configs/default.yaml
+# ============================================================================
+
+# ---- 数据清洗配置 ----
+cleaning:
+  # 缺失值处理
+  missing:
+    enabled: true
+    strategy: mean          # mean, median, mode, drop, constant
+    constant_value: null    # 当 strategy=constant 时使用的填充值
+
+  # 重复值处理
+  duplicate:
+    enabled: true
+    keep: first             # first, last, False (删除全部重复)
+
+  # 异常值处理
+  outlier:
+    enabled: true
+    method: iqr             # iqr, zscore
+    threshold: 1.5          # IQR倍数 (IQR) 或 Z-score阈值 (zscore)
+    action: flag            # flag (仅标记), remove (移除行)
+
+  # 日期标准化
+  date:
+    enabled: true
+    target_format: "%Y-%m-%d"
+
+# ---- 报告配置 ----
+report:
+  formats:
+    - html                  # html, json, markdown
+  output_dir: reports
+  include_charts: true
+  include_outliers: true
+
+# ---- 语义引擎 ----
+semantic_enabled: true
+
+# ---- 插件系统 ----
+plugins_dir: plugins
+
+# ---- 日志 ----
+log_level: INFO              # DEBUG, INFO, WARNING, ERROR
+log_file: logs/dqengine.log

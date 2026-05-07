@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DQEngine Data Quality Report</title>
+    <style>
+        :root {
+            --bg: #f5f7fa;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --text-secondary: #7f8c8d;
+            --border: #e1e8ed;
+            --accent: #3498db;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        header h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 8px; }
+        header .subtitle { opacity: 0.85; font-size: 0.95rem; }
+        .score-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            text-align: center;
+        }
+        .score-circle {
+            display: inline-block;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: conic-gradient(#27ae60 342.72deg, #ecf0f1 0deg);
+            position: relative;
+            margin: 20px 0;
+        }
+        .score-inner {
+            position: absolute;
+            top: 12px; left: 12px;
+            width: 116px; height: 116px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .score-number { font-size: 2.4rem; font-weight: 800; color: #27ae60; }
+        .score-grade { font-size: 0.9rem; color: var(--text-secondary); }
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 16px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--border);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th { background: #f8f9fa; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.5px; }
+        tr:hover { background: #f8f9fa; }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        .metric {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        .metric-value { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+        .metric-label { font-size: 0.82rem; color: var(--text-secondary); margin-top: 4px; }
+        .dimension-bar {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .dimension-name { width: 160px; font-size: 0.9rem; font-weight: 500; }
+        .dimension-fill {
+            height: 22px;
+            border-radius: 11px;
+            transition: width 0.5s ease;
+        }
+        .dimension-score { margin-left: 12px; font-weight: 600; font-size: 0.9rem; }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+        .badge-mild { background: #fef3cd; color: #856404; }
+        .badge-extreme { background: #f8d7da; color: #721c24; }
+        .badge-pass { background: #d4edda; color: #155724; }
+        .badge-fail { background: #f8d7da; color: #721c24; }
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>DQEngine Data Quality Report</h1>
+        <div class="subtitle">Generated at 2026-05-06 23:18:04 | Source: examples\sample.csv</div>
+    </header>
+
+    <div class="container">
+        <!-- Quality Score -->
+        <div class="score-card">
+            <h2>Overall Quality Score</h2>
+            <div class="score-circle">
+                <div class="score-inner">
+                    <span class="score-number">95.2</span>
+                    <span class="score-grade">Grade A</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Overview -->
+        <div class="card">
+            <h2>Data Overview</h2>
+            <div class="metric-grid">
+                <div class="metric">
+                    <div class="metric-value">25</div>
+                    <div class="metric-label">Total Rows</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">8</div>
+                    <div class="metric-label">Total Columns</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">200</div>
+                    <div class="metric-label">Total Cells</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">0</div>
+                    <div class="metric-label">Duplicate Rows</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">0.01 MB</div>
+                    <div class="metric-label">Memory Usage</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quality Dimensions -->
+        <div class="card">
+            <h2>Quality Dimensions</h2>
+            
+            <div class="dimension-bar">
+                <span class="dimension-name">completeness</span>
+                <div style="flex:1; background:#ecf0f1; border-radius:11px;">
+                    <div class="dimension-fill" style="width:99.5%; background:#27ae60;"></div>
+                </div>
+                <span class="dimension-score">99.5/100</span>
+            </div>
+            
+            <div class="dimension-bar">
+                <span class="dimension-name">uniqueness</span>
+                <div style="flex:1; background:#ecf0f1; border-radius:11px;">
+                    <div class="dimension-fill" style="width:84.5%; background:#27ae60;"></div>
+                </div>
+                <span class="dimension-score">84.5/100</span>
+            </div>
+            
+            <div class="dimension-bar">
+                <span class="dimension-name">validity</span>
+                <div style="flex:1; background:#ecf0f1; border-radius:11px;">
+                    <div class="dimension-fill" style="width:100.0%; background:#27ae60;"></div>
+                </div>
+                <span class="dimension-score">100.0/100</span>
+            </div>
+            
+        </div>
+
+        <!-- Column Profiles -->
+        <div class="card">
+            <h2>Column Statistics</h2>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Column</th>
+                            <th>Type</th>
+                            <th>Non-Null</th>
+                            <th>Null Rate</th>
+                            <th>Unique</th>
+                            <th>Mean</th>
+                            <th>Min</th>
+                            <th>Max</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                        <tr>
+                            <td><strong>id</strong></td>
+                            <td>int64</td>
+                            <td>25/25</td>
+                            <td>0.0%</td>
+                            <td>25</td>
+                            <td>13.0</td>
+                            <td>1.0</td>
+                            <td>25.0</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>name</strong></td>
+                            <td>object</td>
+                            <td>25/25</td>
+                            <td>0.0%</td>
+                            <td>23</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>age</strong></td>
+                            <td>float64</td>
+                            <td>25/25</td>
+                            <td>0.0%</td>
+                            <td>18</td>
+                            <td>78.43</td>
+                            <td>22.0</td>
+                            <td>900.0</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>email</strong></td>
+                            <td>object</td>
+                            <td>25/25</td>
+                            <td>0.0%</td>
+                            <td>23</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>gender</strong></td>
+                            <td>object</td>
+                            <td>25/25</td>
+                            <td>0.0%</td>
+                            <td>3</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>salary</strong></td>
+                            <td>object</td>
+                            <td>25/25</td>
+                            <td>0.0%</td>
+                            <td>21</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>hire_date</strong></td>
+                            <td>object</td>
+                            <td>24/25</td>
+                            <td>4.0%</td>
+                            <td>21</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>department</strong></td>
+                            <td>object</td>
+                            <td>25/25</td>
+                            <td>0.0%</td>
+                            <td>4</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                        </tr>
+                        
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Outliers -->
+        
+        <div class="card">
+            <h2>Outlier Summary (2 total)</h2>
+            <table>
+                <thead>
+                    <tr><th>Column</th><th>Mild</th><th>Extreme</th></tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td><strong>age</strong></td>
+                        <td><span class="badge badge-mild">0</span></td>
+                        <td><span class="badge badge-extreme">2</span></td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+        
+
+        <!-- Repair Summary -->
+        
+        <div class="card">
+            <h2>Repair Operations</h2>
+            <table>
+                <thead>
+                    <tr><th>Operation</th><th>Rows Before</th><th>Rows After</th><th>Changes</th><th>Columns Affected</th></tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td><strong>duplicate_removal</strong></td>
+                        <td>25</td>
+                        <td>25</td>
+                        <td>0</td>
+                        <td>8</td>
+                    </tr>
+                    
+                    <tr>
+                        <td><strong>missing_value_fill</strong></td>
+                        <td>25</td>
+                        <td>25</td>
+                        <td>15</td>
+                        <td>7</td>
+                    </tr>
+                    
+                    <tr>
+                        <td><strong>date_standardization</strong></td>
+                        <td>25</td>
+                        <td>25</td>
+                        <td>1</td>
+                        <td>1</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+        
+    </div>
+
+    <footer>
+        Powered by <strong>DQEngine</strong> v0.1.0 &mdash; Data Quality Governance Framework
+    </footer>
+</body>
+</html>

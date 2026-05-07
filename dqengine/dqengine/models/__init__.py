@@ -1,3 +1,4 @@
+# 第一阶段模型
 from dqengine.models.schemas import (
     ColumnProfile,
     ProfileResult,
@@ -10,7 +11,31 @@ from dqengine.models.schemas import (
     RuleViolation,
 )
 
+# 第二阶段新增模型
+from dqengine.models.schemas import (
+    SemanticType,
+    FieldSemantic,
+    SemanticResult,
+    SemanticPattern,
+    BatchFileResult,
+    BatchSummary,
+    PipelineStep,
+    PipelineConfig,
+    PluginType,
+    PluginInfo,
+    MissingValueConfig,
+    DuplicateConfig,
+    OutlierConfig,
+    DateConfig,
+    CleaningConfig,
+    ReportFormat,
+    ReportConfig,
+    AppConfig,
+    DoctorResult,
+)
+
 __all__ = [
+    # 第一阶段
     "ColumnProfile",
     "ProfileResult",
     "QualityScore",
@@ -20,4 +45,24 @@ __all__ = [
     "ValidationRule",
     "ValidationResult",
     "RuleViolation",
+    # 第二阶段
+    "SemanticType",
+    "FieldSemantic",
+    "SemanticResult",
+    "SemanticPattern",
+    "BatchFileResult",
+    "BatchSummary",
+    "PipelineStep",
+    "PipelineConfig",
+    "PluginType",
+    "PluginInfo",
+    "MissingValueConfig",
+    "DuplicateConfig",
+    "OutlierConfig",
+    "DateConfig",
+    "CleaningConfig",
+    "ReportFormat",
+    "ReportConfig",
+    "AppConfig",
+    "DoctorResult",
 ]
