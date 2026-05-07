@@ -70,3 +70,146 @@
 2026-05-07 10:33:09 | DEBUG    | dqengine.core.loader | Excel 加载: test.xlsx
 2026-05-07 10:33:09 | DEBUG    | dqengine.core.loader | JSON 加载: tmpcnuq64bd.json
 2026-05-07 10:33:09 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpeicaxi1t.csv (编码: utf-8)
+2026-05-07 14:30:08 | INFO     | dqengine.services.config_manager | 加载配置: tmpe2nj_f4m.yaml
+2026-05-07 14:30:08 | INFO     | dqengine.services.config_manager | 配置已导出: C:\Users\13033\AppData\Local\Temp\tmp80yo2ijl.yaml
+2026-05-07 14:30:08 | INFO     | dqengine.services.config_manager | 加载配置: tmp80yo2ijl.yaml
+2026-05-07 14:30:08 | INFO     | dqengine.services.config_manager | 加载配置: tmpyg5id1vx.yaml
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpcfm_7ywz.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpjtbf9ykf.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpd7ljtdnl.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpeah905b4.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpcxjkahvp.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmplka5k9k9.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpvasyzjl9.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpcp6e5r5j.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmph248scd2.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpassp6qdv.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmptpiy4598.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmphysns5jv.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp7ogf5dze.csv (编码: utf-8)
+2026-05-07 14:30:08 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpkbftapg6.csv (编码: utf-8)
+2026-05-07 14:30:08 | INFO     | dqengine.services.orchestrator | Step 1: 加载数据 tmp1477zeai.csv
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp1477zeai.csv (编码: utf-8)
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | Step 2: 清洗前数据分析
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator |   清洗前质量评分: 90.0 (A)
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | Step 3: 移除重复行
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator |   已移除 1 个重复行
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | Step 4: 填充缺失值 (策略: mean)
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator |   已填充 0 个缺失值
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | Step 5: 日期标准化
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | Step 6: 异常值检测 (方法: iqr)
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator |   检测到 0 个异常值
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | Step 8: 清洗后数据分析
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator |   清洗后质量评分: 100.0 (A)
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | 数据已保存: C:\Users\13033\AppData\Local\Temp\tmpgtskkk2x.csv
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | Step 10: 生成报告
+2026-05-07 14:30:09 | INFO     | dqengine.services.orchestrator | 报告已生成: C:\Users\13033\AppData\Local\Temp\tmp4xtm9oj2.html
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp8r1n21ki.csv (编码: utf-8)
+2026-05-07 14:30:09 | INFO     | dqengine.pipeline.generator | Pipeline 已生成: C:\Users\13033\AppData\Local\Temp\tmpia1y67ll.py (4 个步骤)
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | CSV 加载成功: test.csv (编码: utf-8)
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | CSV 加载成功: gbk_test.csv (编码: gbk)
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | Excel 加载: test.xlsx
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | JSON 加载: tmp3iicmp1f.json
+2026-05-07 14:30:09 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpj9nxtykq.csv (编码: utf-8)
+2026-05-07 14:30:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp3cscgvh_.csv (编码: utf-8)
+2026-05-07 14:30:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpj0c5b5ch.csv (编码: utf-8)
+2026-05-07 14:30:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpz0ekd7or.csv (编码: utf-8)
+2026-05-07 14:32:10 | INFO     | dqengine.services.config_manager | 加载配置: tmp4cr2rkbo.yaml
+2026-05-07 14:32:10 | INFO     | dqengine.services.config_manager | 配置已导出: C:\Users\13033\AppData\Local\Temp\tmpssrmbf6w.yaml
+2026-05-07 14:32:10 | INFO     | dqengine.services.config_manager | 加载配置: tmpssrmbf6w.yaml
+2026-05-07 14:32:10 | INFO     | dqengine.services.config_manager | 加载配置: tmpyexrmgws.yaml
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpj4oxz484.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp6ise07cy.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp2d21_fao.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp866gchc_.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp3n4mw7zd.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp_w9hjejo.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp650qrkem.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp282o1fzy.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpiz__83lq.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpqu77yqlw.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp5utr7s_i.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpb8ak1lzk.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpccdude9j.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpnvdms2fk.csv (编码: utf-8)
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 1: 加载数据 tmpxqgxjnng.csv
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpxqgxjnng.csv (编码: utf-8)
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 2: 清洗前数据分析
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator |   清洗前质量评分: 90.0 (A)
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 3: 移除重复行
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator |   已移除 1 个重复行
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 4: 填充缺失值 (策略: mean)
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator |   已填充 0 个缺失值
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 5: 日期标准化
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 6: 异常值检测 (方法: iqr)
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator |   检测到 0 个异常值
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 8: 清洗后数据分析
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator |   清洗后质量评分: 100.0 (A)
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | 数据已保存: C:\Users\13033\AppData\Local\Temp\tmpk7cobbh4.csv
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | Step 10: 生成报告
+2026-05-07 14:32:10 | INFO     | dqengine.services.orchestrator | 报告已生成: C:\Users\13033\AppData\Local\Temp\tmplqn3x3_f.html
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpoi3ovg0a.csv (编码: utf-8)
+2026-05-07 14:32:10 | INFO     | dqengine.pipeline.generator | Pipeline 已生成: C:\Users\13033\AppData\Local\Temp\tmppng1egqt.py (4 个步骤)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: test.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: gbk_test.csv (编码: gbk)
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | Excel 加载: test.xlsx
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | JSON 加载: tmp9d2guv21.json
+2026-05-07 14:32:10 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp25bc1z65.csv (编码: utf-8)
+2026-05-07 14:32:12 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpcsy316_6.csv (编码: utf-8)
+2026-05-07 14:32:12 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpsaidobjy.csv (编码: utf-8)
+2026-05-07 14:32:12 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpebirm87s.csv (编码: utf-8)
+2026-05-07 14:32:20 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:32:22 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:32:22 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:32:34 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:32:47 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:32:56 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:33:35 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:33:36 | INFO     | dqengine.report.advanced_generator | HTML 报告已生成: reports\quality_report_20260507_143335.html
+2026-05-07 14:33:45 | INFO     | dqengine.services.config_manager | 加载配置: tmpnzdi3f5s.yaml
+2026-05-07 14:33:45 | INFO     | dqengine.services.config_manager | 配置已导出: C:\Users\13033\AppData\Local\Temp\tmpfpj_okk5.yaml
+2026-05-07 14:33:45 | INFO     | dqengine.services.config_manager | 加载配置: tmpfpj_okk5.yaml
+2026-05-07 14:33:45 | INFO     | dqengine.services.config_manager | 加载配置: tmphpxpd7qz.yaml
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp1_rli7e2.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpx48rmm7l.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmph4yiguuu.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpdvs5bw9w.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpnpep2v15.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp__su9ib1.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp_w_puxla.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp69_zwd8i.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpj2t1p9d_.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpssfampto.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmphodnyzqj.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpu3fei5v0.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmppvfdpjnu.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmppskbr8kz.csv (编码: utf-8)
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 1: 加载数据 tmphi47supi.csv
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmphi47supi.csv (编码: utf-8)
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 2: 清洗前数据分析
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator |   清洗前质量评分: 90.0 (A)
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 3: 移除重复行
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator |   已移除 1 个重复行
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 4: 填充缺失值 (策略: mean)
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator |   已填充 0 个缺失值
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 5: 日期标准化
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 6: 异常值检测 (方法: iqr)
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator |   检测到 0 个异常值
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 8: 清洗后数据分析
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator |   清洗后质量评分: 100.0 (A)
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | 数据已保存: C:\Users\13033\AppData\Local\Temp\tmppbd_5khv.csv
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | Step 10: 生成报告
+2026-05-07 14:33:45 | INFO     | dqengine.services.orchestrator | 报告已生成: C:\Users\13033\AppData\Local\Temp\tmpe5scamnj.html
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpu2zw80k1.csv (编码: utf-8)
+2026-05-07 14:33:45 | INFO     | dqengine.pipeline.generator | Pipeline 已生成: C:\Users\13033\AppData\Local\Temp\tmp7tbhhps9.py (4 个步骤)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: test.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: sample.csv (编码: utf-8)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: gbk_test.csv (编码: gbk)
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | Excel 加载: test.xlsx
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | JSON 加载: tmp89c2a9e_.json
+2026-05-07 14:33:45 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpavqoo171.csv (编码: utf-8)
+2026-05-07 14:33:47 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpw7dcwj8w.csv (编码: utf-8)
+2026-05-07 14:33:47 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmpojvr_3iy.csv (编码: utf-8)
+2026-05-07 14:33:47 | DEBUG    | dqengine.core.loader | CSV 加载成功: tmp1degwley.csv (编码: utf-8)

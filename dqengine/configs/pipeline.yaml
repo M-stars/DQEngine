@@ -1,0 +1,21 @@
+# DQEngine DAG Pipeline 配置示例
+pipeline:
+  name: "数据质量治理流水线"
+  description: "加载 → 画像 → 评分 → 清洗 → 语义 → 报告"
+  steps:
+    - type: load
+      config:
+        input: examples/sample.csv
+
+    - type: profile
+
+    - type: score
+
+    - type: clean
+
+    - type: semantic
+
+    - type: report
+      config:
+        output: "pipeline_report.html"
+        format: html

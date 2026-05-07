@@ -1,0 +1,7 @@
+[
+  {"id": "evt_001", "data": {"name": "张三", "age": 28, "email": "zhangsan@example.com", "salary": 15000}},
+  {"id": "evt_002", "data": {"name": "李四", "age": 35, "email": "lisi@example.com", "salary": 25000}},
+  {"id": "evt_003", "data": {"name": "王五", "age": 42, "email": "wangwu@example.com", "salary": 35000}},
+  {"id": "evt_004", "data": {"name": "赵六", "age": 150, "email": "invalid-email", "salary": -1000}},
+  {"id": "evt_005", "data": {"name": "", "age": -5, "email": "test@example.com", "salary": 99999}}
+]

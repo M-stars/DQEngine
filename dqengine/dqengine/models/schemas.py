@@ -341,3 +341,426 @@ class DoctorResult(BaseModel):
     config_found: bool = False
     issues: List[str] = Field(default_factory=list)
     suggestions: List[str] = Field(default_factory=list)
+
+
+# ============================================================================
+# 第三阶段新增模型 - AI规则生成、漂移检测、监控、API、编排、实时、元数据、调度、可观测性
+# ============================================================================
+
+
+# ---- AI 规则生成模型 ----
+
+
+class AIRule(BaseModel):
+    """AI 生成的单条数据质量规则."""
+
+    column: str
+    rule_type: str  # type, range, regex, unique, nullable, allowed_values
+    params: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(ge=0.0, le=1.0, description="生成置信度")
+    reasoning: str = ""
+
+
+class AIRuleSet(BaseModel):
+    """AI 生成的完整规则集."""
+
+    columns: Dict[str, List[AIRule]] = Field(default_factory=dict)
+    generated_by: str = "heuristic"
+    generation_time_ms: float = 0.0
+    warnings: List[str] = Field(default_factory=list)
+
+
+class AIProviderType(str, Enum):
+    """AI Provider 类型."""
+
+    HEURISTIC = "heuristic"
+    OPENAI = "openai"
+    OLLAMA = "ollama"
+    LOCAL = "local"
+
+
+# ---- 数据漂移检测模型 ----
+
+
+class DriftType(str, Enum):
+    """漂移类型."""
+
+    SCHEMA = "schema"
+    DISTRIBUTION = "distribution"
+    NULL = "null"
+    CATEGORY = "category"
+
+
+class DriftSeverity(str, Enum):
+    """漂移严重程度."""
+
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class ColumnDriftResult(BaseModel):
+    """单列漂移检测结果."""
+
+    column_name: str
+    drift_type: DriftType
+    severity: DriftSeverity = DriftSeverity.NONE
+    statistic_name: str = ""  # KS statistic, PSI value, etc.
+    statistic_value: float = 0.0
+    threshold: float = 0.0
+    baseline_value: Any = None
+    current_value: Any = None
+    description: str = ""
+
+
+class DriftReport(BaseModel):
+    """完整漂移检测报告."""
+
+    baseline_file: str
+    current_file: str
+    total_columns: int
+    drifted_columns: int
+    overall_severity: DriftSeverity = DriftSeverity.NONE
+    schema_drift: List[ColumnDriftResult] = Field(default_factory=list)
+    distribution_drift: List[ColumnDriftResult] = Field(default_factory=list)
+    null_drift: List[ColumnDriftResult] = Field(default_factory=list)
+    category_drift: List[ColumnDriftResult] = Field(default_factory=list)
+    detected_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+# ---- 监控模型 ----
+
+
+class MonitorEvent(BaseModel):
+    """单次监控事件."""
+
+    timestamp: str
+    file_path: str
+    event_type: str  # created, modified, deleted
+    profile: Optional[ProfileResult] = None
+    score: Optional[QualityScore] = None
+    drift_detected: bool = False
+
+
+class QualityTrend(BaseModel):
+    """质量趋势数据点."""
+
+    timestamp: str
+    file_name: str
+    overall_score: float
+    row_count: int
+    null_rate: float
+    duplicate_rate: float
+
+
+class MonitorSession(BaseModel):
+    """监控会话."""
+
+    session_id: str
+    watch_directory: str
+    started_at: str
+    events: List[MonitorEvent] = Field(default_factory=list)
+    trends: List[QualityTrend] = Field(default_factory=list)
+    total_files_processed: int = 0
+    alerts: List[str] = Field(default_factory=list)
+
+
+# ---- API 模型 ----
+
+
+class APIResponse(BaseModel):
+    """通用 API 响应."""
+
+    success: bool
+    message: str = ""
+    data: Optional[Dict[str, Any]] = None
+    errors: List[str] = Field(default_factory=list)
+
+
+class ProfileRequest(BaseModel):
+    """画像请求."""
+
+    file_path: str
+    output_format: str = "json"
+
+
+class ValidateRequest(BaseModel):
+    """验证请求."""
+
+    file_path: str
+    rules_path: str
+
+
+class CleanRequest(BaseModel):
+    """清洗请求."""
+
+    file_path: str
+    config_path: Optional[str] = None
+    output_path: str = "cleaned_data.csv"
+
+
+class DriftRequest(BaseModel):
+    """漂移检测请求."""
+
+    baseline_path: str
+    current_path: str
+
+
+# ---- DAG 编排模型 ----
+
+
+class DAGNodeType(str, Enum):
+    """DAG 节点类型."""
+
+    LOAD = "load"
+    PROFILE = "profile"
+    VALIDATE = "validate"
+    CLEAN = "clean"
+    SCORE = "score"
+    REPORT = "report"
+    SEMANTIC = "semantic"
+    DRIFT = "drift"
+    EXPORT = "export"
+
+
+class DAGNodeStatus(str, Enum):
+    """DAG 节点执行状态."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class DAGNode(BaseModel):
+    """DAG 节点定义."""
+
+    node_id: str
+    node_type: DAGNodeType
+    depends_on: List[str] = Field(default_factory=list)
+    config: Dict[str, Any] = Field(default_factory=dict)
+    status: DAGNodeStatus = DAGNodeStatus.PENDING
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class DAGPipeline(BaseModel):
+    """DAG Pipeline 定义."""
+
+    name: str
+    version: str = "1.0.0"
+    description: str = ""
+    nodes: List[DAGNode]
+    edges: List[tuple] = Field(default_factory=list)  # (from_node, to_node)
+
+
+class DAGExecutionResult(BaseModel):
+    """DAG 执行结果."""
+
+    pipeline_name: str
+    success: bool
+    nodes_executed: int
+    nodes_failed: int
+    total_duration_ms: float
+    node_results: Dict[str, DAGNode] = Field(default_factory=dict)
+
+
+# ---- 实时验证模型 ----
+
+
+class StreamEvent(BaseModel):
+    """流式数据事件."""
+
+    event_id: str
+    timestamp: str
+    data: Dict[str, Any]
+    source: str = "simulator"
+
+
+class StreamValidationResult(BaseModel):
+    """流式验证结果."""
+
+    event_id: str
+    passed: bool
+    violations: List[RuleViolation] = Field(default_factory=list)
+    processing_time_ms: float = 0.0
+    score: Optional[float] = None
+
+
+# ---- 元数据与血缘模型 ----
+
+
+class LineageStep(BaseModel):
+    """血缘追踪中的一个处理步骤."""
+
+    step_id: str
+    step_name: str
+    input_data: str
+    output_data: str
+    operation: str
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    duration_ms: float = 0.0
+
+
+class DataLineage(BaseModel):
+    """完整数据血缘."""
+
+    dataset_id: str
+    source_path: str
+    created_at: str
+    steps: List[LineageStep] = Field(default_factory=list)
+    current_schema: Optional[Dict[str, str]] = None
+
+
+class ExecutionRecord(BaseModel):
+    """规则执行历史记录."""
+
+    execution_id: str
+    rule_name: str
+    file_path: str
+    passed: bool
+    violations_count: int
+    execution_time_ms: float
+    executed_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+# ---- 调度模型 ----
+
+
+class ScheduleType(str, Enum):
+    """调度类型."""
+
+    CRON = "cron"
+    INTERVAL = "interval"
+    WATCH = "watch"
+
+
+class ScheduledTask(BaseModel):
+    """调度任务定义."""
+
+    task_id: str
+    name: str
+    schedule_type: ScheduleType
+    schedule_value: str  # cron表达式 或 间隔秒数
+    action: str  # profile, validate, clean, report
+    target_path: str
+    config_path: Optional[str] = None
+    enabled: bool = True
+    last_run: Optional[str] = None
+    next_run: Optional[str] = None
+
+
+class ScheduleConfig(BaseModel):
+    """调度配置."""
+
+    tasks: List[ScheduledTask] = Field(default_factory=list)
+    max_concurrent: int = 3
+    log_dir: str = "logs"
+
+
+# ---- 可观测性模型 ----
+
+
+class MetricType(str, Enum):
+    """指标类型."""
+
+    COUNTER = "counter"
+    GAUGE = "gauge"
+    HISTOGRAM = "histogram"
+    TIMER = "timer"
+
+
+class Metric(BaseModel):
+    """单个指标."""
+
+    name: str
+    metric_type: MetricType
+    value: float
+    labels: Dict[str, str] = Field(default_factory=dict)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+class ExecutionTrace(BaseModel):
+    """执行追踪记录."""
+
+    trace_id: str
+    operation: str
+    start_time: str
+    end_time: Optional[str] = None
+    duration_ms: float = 0.0
+    success: bool = True
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    spans: List["ExecutionTrace"] = Field(default_factory=list)
+
+
+class RuleExecutionStats(BaseModel):
+    """规则执行统计."""
+
+    rule_name: str
+    total_executions: int = 0
+    passed: int = 0
+    failed: int = 0
+    avg_execution_time_ms: float = 0.0
+    last_executed: Optional[str] = None
+    pass_rate: float = 0.0
+
+
+class ObservabilityReport(BaseModel):
+    """可观测性报告."""
+
+    metrics: List[Metric] = Field(default_factory=list)
+    traces: List[ExecutionTrace] = Field(default_factory=list)
+    rule_stats: List[RuleExecutionStats] = Field(default_factory=list)
+    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+# ---- 企业架构模型 ----
+
+
+class StorageType(str, Enum):
+    """存储类型."""
+
+    SQLITE = "sqlite"
+    DUCKDB = "duckdb"
+    POSTGRESQL = "postgresql"
+
+
+class CacheProvider(str, Enum):
+    """缓存提供者."""
+
+    MEMORY = "memory"
+    REDIS = "redis"
+
+
+class Environment(str, Enum):
+    """运行环境."""
+
+    DEV = "dev"
+    TEST = "test"
+    PROD = "prod"
+
+
+class RiskLevel(str, Enum):
+    """数据质量风险等级."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class AnomalyPattern(BaseModel):
+    """数据异常模式."""
+
+    pattern_type: str  # field_conflict, type_drift, high_null, anomaly
+    column: str
+    description: str
+    risk_level: RiskLevel = RiskLevel.MEDIUM
+    suggestion: str = ""
+    detected_at: str = Field(default_factory=lambda: datetime.now().isoformat())

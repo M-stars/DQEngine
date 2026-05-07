@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dqengine"
-version = "0.2.0"
+version = "0.3.0"
 description = "A lightweight, automated, developer-friendly data quality governance framework"
 readme = "README.md"
 license = {text = "MIT"}
@@ -38,6 +38,11 @@ dependencies = [
     "pyarrow>=14.0.0",
     "plotly>=5.18.0",
     "tqdm>=4.66.0",
+    "scipy>=1.11.0",
+    "numpy>=1.24.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +59,17 @@ dev = [
 db = [
     "sqlalchemy>=2.0.0",
 ]
+api = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "python-multipart>=0.0.6",
+]
+monitor = [
+    "watchdog>=3.0.0",
+]
+scheduler = [
+    "apscheduler>=3.10.0",
+]
 all = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
@@ -64,6 +80,12 @@ all = [
     "flake8>=7.0.0",
     "pre-commit>=3.6.0",
     "sqlalchemy>=2.0.0",
+    "scipy>=1.11.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "python-multipart>=0.0.6",
+    "watchdog>=3.0.0",
+    "apscheduler>=3.10.0",
 ]
 
 [project.scripts]

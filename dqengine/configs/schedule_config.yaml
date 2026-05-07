@@ -1,0 +1,29 @@
+# DQEngine 调度配置示例
+tasks:
+  - id: daily_profile
+    name: "每日数据画像"
+    schedule_type: interval
+    schedule_value: "86400"  # 每天一次 (秒)
+    action: profile
+    target_path: examples/sample.csv
+    enabled: true
+
+  - id: hourly_validate
+    name: "每小时规则验证"
+    schedule_type: interval
+    schedule_value: "3600"  # 每小时一次
+    action: validate
+    target_path: examples/sample.csv
+    config: configs/rules.yaml
+    enabled: true
+
+  - id: weekly_clean
+    name: "每周数据清洗"
+    schedule_type: cron
+    schedule_value: "0 9 * * 1"  # 每周一 9:00
+    action: clean
+    target_path: examples/sample.csv
+    enabled: false
+
+max_concurrent: 3
+log_dir: logs
