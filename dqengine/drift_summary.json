@@ -1,0 +1,212 @@
+{
+  "baseline_file": "examples\\sample.csv",
+  "current_file": "examples\\sample.csv",
+  "total_columns": 10,
+  "drifted_columns": 10,
+  "overall_severity": "low",
+  "schema_drift": [],
+  "distribution_drift": [],
+  "null_drift": [
+    {
+      "column_name": "email",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.0,
+      "current_value": 0.0,
+      "description": "空值率: 0.00% → 0.00% (Δ=0.00%)"
+    },
+    {
+      "column_name": "city",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.1111,
+      "current_value": 0.1111,
+      "description": "空值率: 11.11% → 11.11% (Δ=0.00%)"
+    },
+    {
+      "column_name": "name",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.1111,
+      "current_value": 0.1111,
+      "description": "空值率: 11.11% → 11.11% (Δ=0.00%)"
+    },
+    {
+      "column_name": "url",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.0,
+      "current_value": 0.0,
+      "description": "空值率: 0.00% → 0.00% (Δ=0.00%)"
+    },
+    {
+      "column_name": "salary",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.0,
+      "current_value": 0.0,
+      "description": "空值率: 0.00% → 0.00% (Δ=0.00%)"
+    },
+    {
+      "column_name": "phone",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.1111,
+      "current_value": 0.1111,
+      "description": "空值率: 11.11% → 11.11% (Δ=0.00%)"
+    },
+    {
+      "column_name": "gender",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.0,
+      "current_value": 0.0,
+      "description": "空值率: 0.00% → 0.00% (Δ=0.00%)"
+    },
+    {
+      "column_name": "join_date",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.1111,
+      "current_value": 0.1111,
+      "description": "空值率: 11.11% → 11.11% (Δ=0.00%)"
+    },
+    {
+      "column_name": "age",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.2222,
+      "current_value": 0.2222,
+      "description": "空值率: 22.22% → 22.22% (Δ=0.00%)"
+    },
+    {
+      "column_name": "country",
+      "drift_type": "null",
+      "severity": "low",
+      "statistic_name": "null_rate_change",
+      "statistic_value": 0.0,
+      "threshold": 0.0,
+      "baseline_value": 0.1111,
+      "current_value": 0.1111,
+      "description": "空值率: 11.11% → 11.11% (Δ=0.00%)"
+    }
+  ],
+  "category_drift": [
+    {
+      "column_name": "email",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    },
+    {
+      "column_name": "city",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    },
+    {
+      "column_name": "name",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    },
+    {
+      "column_name": "url",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    },
+    {
+      "column_name": "phone",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    },
+    {
+      "column_name": "gender",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    },
+    {
+      "column_name": "join_date",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    },
+    {
+      "column_name": "country",
+      "drift_type": "category",
+      "severity": "low",
+      "statistic_name": "PSI",
+      "statistic_value": 0.0,
+      "threshold": 0.1,
+      "baseline_value": null,
+      "current_value": null,
+      "description": "PSI=0.0000"
+    }
+  ],
+  "detected_at": "2026-05-07T14:32:22.401690"
+}

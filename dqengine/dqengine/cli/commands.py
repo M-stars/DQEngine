@@ -41,7 +41,7 @@ from dqengine.utils.console import (
 
 app = typer.Typer(
     name="dq",
-    help="DQEngine — 轻量级数据质量治理框架 v2.0",
+    help="DQEngine — AI-Driven Data Quality Platform v3.0",
     add_completion=False,
     no_args_is_help=True,
 )
@@ -57,14 +57,36 @@ def callback(
         False, "--verbose", "-v", help="详细输出"
     ),
 ) -> None:
-    """DQEngine: Data Quality Governance Framework.
+    """DQEngine: AI-Driven Data Quality Platform.
 
     示例:
+        # 数据分析
         dq profile data.csv
         dq auto data.csv --config configs/default.yaml
+        dq validate data.csv --rules configs/rules.yaml
+
+        # AI 与语义
         dq semantic data.csv
+        dq ai generate-rules data.csv
+
+        # 漂移检测
+        dq drift baseline.csv current.csv
+
+        # 监控与调度
+        dq monitor ./incoming_data
+        dq schedule schedule_config.yaml
+
+        # 批量与编排
         dq batch ./datasets
-        dq pipeline data.csv
+        dq run-pipeline pipeline.yaml
+
+        # 实时验证
+        dq stream-validate stream.json --rules configs/rules.yaml
+
+        # API 服务
+        dq serve
+
+        # 工具
         dq plugins
         dq doctor
     """
@@ -656,6 +678,544 @@ def doctor() -> None:
         print_success("环境诊断通过, 一切正常!")
     else:
         print_warning(f"环境诊断完成, 发现 {len(issues)} 个问题")
+
+    console.print()
+
+
+# ============================================================================
+# 第三阶段新增命令 - AI、漂移检测、监控、API、编排、实时、调度
+# ============================================================================
+
+
+# ---- 子命令分组 ----
+
+ai_app = typer.Typer(
+    name="ai",
+    help="AI 辅助功能",
+    no_args_is_help=True,
+)
+app.add_typer(ai_app, name="ai")
+
+
+@ai_app.command("generate-rules")
+def ai_generate_rules(
+    file: str = typer.Argument(..., help="数据文件路径"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="保存生成的规则为 YAML"),
+    provider: str = typer.Option("heuristic", "--provider", "-p", help="AI Provider: heuristic, openai, ollama"),
+) -> None:
+    """使用 AI 自动推断数据质量规则.
+
+    示例:
+        dq ai generate-rules data.csv
+        dq ai generate-rules data.csv -o generated_rules.yaml
+    """
+    path = Path(file)
+    if not path.exists():
+        print_error(f"文件未找到: {file}")
+        raise typer.Exit(code=1)
+
+    from dqengine.ai.generator import HeuristicRuleGenerator, LLMRuleGenerator
+
+    console.print()
+    console.print(Panel.fit(f"[bold]AI 规则生成:[/bold] {path.name}", border_style="cyan"))
+
+    loader = DataLoader()
+    try:
+        df = loader.load(path)
+    except Exception as e:
+        print_error(f"加载文件失败: {e}")
+        raise typer.Exit(code=1)
+
+    if provider == "heuristic":
+        generator = HeuristicRuleGenerator()
+    else:
+        generator = LLMRuleGenerator(model_name=provider)
+
+    rule_set = generator.generate(df)
+
+    print_success(f"生成完成: {sum(len(r) for r in rule_set.columns.values())} 条规则 "
+                  f"[dim]({rule_set.generation_time_ms:.0f}ms)[/dim]")
+    console.print()
+
+    # 显示规则
+    for col_name, rules in rule_set.columns.items():
+        if not rules:
+            continue
+        console.print(f"[bold cyan]{col_name}[/bold cyan]:")
+        for rule in rules:
+            console.print(
+                f"  [green]{rule.rule_type}[/green] "
+                f"[dim]{rule.params}[/dim] "
+                f"[yellow](置信度: {rule.confidence:.0%})[/yellow]"
+            )
+            if rule.reasoning:
+                console.print(f"    [dim]→ {rule.reasoning}[/dim]")
+
+    # 警告
+    if rule_set.warnings:
+        console.print()
+        for w in rule_set.warnings:
+            print_warning(w)
+
+    # 导出 YAML
+    if output:
+        import yaml
+
+        yaml_rules: Dict[str, Dict[str, Any]] = {"rules": {}}
+        for col_name, rules in rule_set.columns.items():
+            col_rule: Dict[str, Any] = {}
+            for rule in rules:
+                if rule.rule_type == "range":
+                    col_rule["min"] = rule.params.get("min")
+                    col_rule["max"] = rule.params.get("max")
+                elif rule.rule_type == "regex":
+                    col_rule["regex"] = rule.params.get("pattern")
+                elif rule.rule_type == "nullable":
+                    col_rule["nullable"] = rule.params.get("nullable")
+                elif rule.rule_type == "unique":
+                    col_rule["unique"] = rule.params.get("should_be_unique")
+                elif rule.rule_type == "allowed_values":
+                    col_rule["allowed_values"] = rule.params.get("values")
+                elif rule.rule_type == "type":
+                    col_rule["type"] = rule.params.get("expected_type")
+            if col_rule:
+                yaml_rules["rules"][col_name] = col_rule
+
+        out_path = Path(output)
+        out_path.write_text(yaml.dump(yaml_rules, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+        print_success(f"规则已保存至: {out_path}")
+
+    console.print()
+
+
+@app.command()
+def drift(
+    baseline: str = typer.Argument(..., help="基线数据文件路径"),
+    current: str = typer.Argument(..., help="当前数据文件路径"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="输出 JSON 报告路径"),
+    html: Optional[str] = typer.Option(None, "--html", help="输出 HTML 报告路径"),
+) -> None:
+    """检测两个数据集之间的数据漂移.
+
+    检测四种漂移:
+    - Schema 漂移 (列增删、类型变化)
+    - 分布漂移 (KS Test)
+    - 空值率漂移
+    - 分类漂移 (PSI)
+
+    示例:
+        dq drift baseline.csv current.csv
+        dq drift baseline.csv current.csv --html drift_report.html
+    """
+    baseline_path = Path(baseline)
+    current_path = Path(current)
+
+    if not baseline_path.exists():
+        print_error(f"基线文件未找到: {baseline}")
+        raise typer.Exit(code=1)
+    if not current_path.exists():
+        print_error(f"当前文件未找到: {current}")
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(
+        Panel.fit(
+            f"[bold]漂移检测:[/bold] {baseline_path.name} → {current_path.name}",
+            border_style="cyan",
+        )
+    )
+
+    from dqengine.drift.detector import DriftDetector
+
+    detector = DriftDetector()
+    report = detector.detect(str(baseline_path), str(current_path))
+
+    # 汇总显示
+    severity_colors = {
+        "none": "green",
+        "low": "green",
+        "medium": "yellow",
+        "high": "red",
+        "critical": "bold red",
+    }
+    sev_color = severity_colors.get(report.overall_severity.value, "white")
+
+    console.print()
+    console.print(
+        Panel.fit(
+            f"总列数: {report.total_columns}  |  "
+            f"漂移列数: [bold]{report.drifted_columns}[/bold]  |  "
+            f"整体严重度: [{sev_color}]{report.overall_severity.value.upper()}[/{sev_color}]",
+            border_style=sev_color.split()[-1],
+        )
+    )
+
+    # 各类漂移详情
+    sections = [
+        ("Schema 漂移", report.schema_drift),
+        ("分布漂移 (KS Test)", report.distribution_drift),
+        ("空值率漂移", report.null_drift),
+        ("分类漂移 (PSI)", report.category_drift),
+    ]
+
+    for title, drifts in sections:
+        if drifts:
+            console.print(f"\n[bold]{title} ({len(drifts)}):[/bold]")
+            for d in drifts:
+                s_color = severity_colors.get(d.severity.value, "white")
+                console.print(
+                    f"  [{s_color}]●[/{s_color}] {d.column_name}: {d.description}"
+                )
+
+    # 输出文件
+    if output:
+        detector.save_summary_json(report, output)
+        print_success(f"漂移摘要已保存: {output}")
+
+    if html:
+        detector.generate_html_report(report, html)
+        print_success(f"漂移报告已保存: {html}")
+
+    # 默认保存
+    if not output and not html:
+        default_json = "drift_summary.json"
+        default_html = "drift_report.html"
+        detector.save_summary_json(report, default_json)
+        detector.generate_html_report(report, default_html)
+        print_success(f"报告已保存: {default_json}, {default_html}")
+
+    console.print()
+
+
+@app.command()
+def monitor(
+    directory: str = typer.Argument(..., help="监控目录路径"),
+    interval: int = typer.Option(30, "--interval", "-i", help="扫描间隔 (秒)"),
+    baseline: Optional[str] = typer.Option(None, "--baseline", "-b", help="基线文件 (用于漂移检测)"),
+    report: Optional[str] = typer.Option(None, "--report", "-r", help="输出监控报告路径"),
+) -> None:
+    """持续监控目录中的数据质量变化.
+
+    功能:
+    - 自动扫描新文件
+    - 执行画像、评分
+    - 漂移检测
+    - 历史趋势记录
+
+    示例:
+        dq monitor ./incoming_data
+        dq monitor ./incoming_data -i 60 -b baseline.csv
+    """
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        print_error(f"目录不存在: {directory}")
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(
+        Panel.fit(
+            f"[bold]质量监控:[/bold] {dir_path}\n"
+            f"扫描间隔: {interval}s  |  基线: {baseline or '无'}",
+            border_style="cyan",
+        )
+    )
+
+    from dqengine.monitoring.monitor import QualityMonitor
+
+    monitor = QualityMonitor(
+        watch_directory=str(dir_path),
+        baseline_file=baseline,
+        trends_file="quality_trends.json",
+    )
+
+    print_info(f"会话 ID: {monitor.session.session_id}")
+    print_info("按 Ctrl+C 停止监控")
+
+    try:
+        monitor.start_polling(interval_seconds=interval)
+    except KeyboardInterrupt:
+        console.print()
+        print_success(f"监控已停止. 共处理 {monitor.session.total_files_processed} 个文件")
+
+        if report:
+            monitor.generate_trends_html(report)
+            print_success(f"监控报告已保存: {report}")
+        else:
+            monitor.generate_trends_html("monitoring_report.html")
+            print_success("监控报告已保存: monitoring_report.html")
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("0.0.0.0", "--host", "-h", help="绑定地址"),
+    port: int = typer.Option(8000, "--port", "-p", help="端口号"),
+    reload: bool = typer.Option(False, "--reload", help="开发模式自动重载"),
+) -> None:
+    """启动 REST API 服务器.
+
+    提供以下 API 端点:
+    - POST /profile - 数据画像
+    - POST /validate - 规则验证
+    - POST /clean - 自动清洗
+    - POST /semantic - 语义分析
+    - POST /drift - 漂移检测
+    - POST /report - 报告生成
+    - GET /health - 健康检查
+    - GET /docs - OpenAPI 文档
+
+    示例:
+        dq serve
+        dq serve --port 8080 --reload
+    """
+    console.print()
+    console.print(
+        Panel.fit(
+            f"[bold]DQEngine API Server[/bold]\n"
+            f"地址: http://{host}:{port}\n"
+            f"文档: http://{host}:{port}/docs\n"
+            f"Redoc: http://{host}:{port}/redoc",
+            border_style="cyan",
+        )
+    )
+    console.print()
+
+    try:
+        import uvicorn
+        from dqengine.api.server import create_app
+
+        app = create_app()
+        uvicorn.run(app, host=host, port=port, reload=reload, log_level="info")
+    except ImportError:
+        print_error("请安装 API 依赖: pip install fastapi uvicorn python-multipart")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def run_pipeline(
+    pipeline_file: str = typer.Argument(..., help="Pipeline YAML 文件路径"),
+    input_file: Optional[str] = typer.Option(None, "--input", "-i", help="输入数据文件"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="输出结果 JSON"),
+) -> None:
+    """运行 DAG Pipeline 编排文件.
+
+    Pipeline YAML 格式:
+        pipeline:
+          name: my_pipeline
+          steps:
+            - type: load
+            - type: profile
+            - type: validate
+            - type: clean
+            - type: score
+            - type: report
+
+    示例:
+        dq run-pipeline pipeline.yaml
+        dq run-pipeline pipeline.yaml -i data.csv
+    """
+    path = Path(pipeline_file)
+    if not path.exists():
+        print_error(f"Pipeline 文件未找到: {pipeline_file}")
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(Panel.fit(f"[bold]执行 Pipeline:[/bold] {path.name}", border_style="cyan"))
+
+    from dqengine.orchestrator.engine import DAGEngine
+
+    engine = DAGEngine()
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("[cyan]Pipeline 执行中...", total=None)
+
+        try:
+            result = engine.run_pipeline(str(path), input_file)
+        except Exception as e:
+            progress.update(task, completed=True, description="[red]Pipeline 失败!")
+            print_error(f"执行失败: {e}")
+            raise typer.Exit(code=1)
+
+        progress.update(task, completed=True, description="[green]Pipeline 完成!")
+
+    # 显示结果
+    console.print()
+    status_color = "green" if result.success else "red"
+    console.print(
+        Panel.fit(
+            f"状态: [{status_color}]{'成功' if result.success else '失败'}[/{status_color}]\n"
+            f"节点: {result.nodes_executed} 执行, {result.nodes_failed} 失败\n"
+            f"耗时: {result.total_duration_ms:.0f}ms",
+            border_style=status_color,
+        )
+    )
+
+    # 各节点详情
+    if result.node_results:
+        node_rows = []
+        for node_id, node in result.node_results.items():
+            status_text = {
+                "completed": "[green]完成[/green]",
+                "failed": "[red]失败[/red]",
+                "skipped": "[yellow]跳过[/yellow]",
+            }.get(node.status.value if hasattr(node.status, 'value') else node.status, node.status)
+            node_rows.append([node_id, node.node_type.value, status_text, node.error or "-"])
+        console.print()
+        console.print(create_table("节点详情", ["节点ID", "类型", "状态", "错误"], node_rows))
+
+    if output:
+        out_path = Path(output)
+        out_path.write_text(result.model_dump_json(indent=2, encoding="utf-8"))
+        print_success(f"结果已保存: {out_path}")
+
+    if not result.success:
+        raise typer.Exit(code=1)
+
+    console.print()
+
+
+@app.command()
+def stream_validate(
+    stream_file: str = typer.Argument(..., help="流式数据文件 (JSON)"),
+    rules: str = typer.Option(..., "--rules", "-r", help="YAML 规则文件路径"),
+    interval: int = typer.Option(0, "--interval", "-i", help="事件间隔 (ms)"),
+    max_events: int = typer.Option(0, "--max", "-m", help="最大事件数 (0=不限)"),
+) -> None:
+    """实时流式数据验证 (Local Simulator).
+
+    从 JSON 文件逐条读取事件并实时验证.
+
+    示例:
+        dq stream-validate stream_data.json --rules configs/rules.yaml
+        dq stream-validate stream.json -r rules.yaml -i 100 -m 50
+    """
+    path = Path(stream_file)
+    rules_path = Path(rules)
+
+    if not path.exists():
+        print_error(f"流数据文件未找到: {stream_file}")
+        raise typer.Exit(code=1)
+    if not rules_path.exists():
+        print_error(f"规则文件未找到: {rules}")
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(
+        Panel.fit(
+            f"[bold]实时流验证:[/bold] {path.name}\n规则: {rules_path.name}",
+            border_style="cyan",
+        )
+    )
+
+    from dqengine.realtime.validator import StreamValidator
+
+    validator = StreamValidator(rules_path=str(rules_path), mode="local")
+    print_info("开始处理事件流...")
+
+    passed_count = 0
+    failed_count = 0
+    total_time = 0.0
+
+    try:
+        for result in validator.validate_stream(str(path), interval_ms=interval, max_events=max_events):
+            total_time += result.processing_time_ms
+            if result.passed:
+                passed_count += 1
+                status = "[green]✓[/green]"
+            else:
+                failed_count += 1
+                status = f"[red]✗ ({len(result.violations)} 违规)[/red]"
+
+            console.print(f"  {status} Event: {result.event_id} [{result.processing_time_ms:.2f}ms]")
+    except KeyboardInterrupt:
+        console.print()
+
+    total = passed_count + failed_count
+    console.print()
+    console.print(
+        Panel.fit(
+            f"事件: {total}  |  "
+            f"[green]通过: {passed_count}[/green]  |  "
+            f"[red]失败: {failed_count}[/red]  |  "
+            f"平均耗时: {total_time/max(total,1):.2f}ms",
+            border_style="green" if failed_count == 0 else "red",
+        )
+    )
+    console.print()
+
+
+@app.command()
+def schedule(
+    config_file: str = typer.Argument(..., help="调度配置文件 (YAML)"),
+) -> None:
+    """启动任务调度器，按 cron/interval 定时执行数据治理任务.
+
+    配置文件格式:
+        tasks:
+          - id: daily_profile
+            name: 每日画像
+            schedule_type: cron
+            schedule_value: "0 9 * * *"
+            action: profile
+            target_path: ./data
+
+    示例:
+        dq schedule schedule_config.yaml
+    """
+    path = Path(config_file)
+    if not path.exists():
+        print_error(f"调度配置文件未找到: {config_file}")
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(Panel.fit(f"[bold]任务调度器:[/bold] {path.name}", border_style="cyan"))
+
+    from dqengine.scheduler.scheduler import TaskScheduler
+
+    scheduler = TaskScheduler()
+    scheduler.load_config(str(path))
+
+    # 显示所有任务
+    task_rows = []
+    for t in scheduler.tasks.values():
+        if t.enabled:
+            task_rows.append([
+                t.name,
+                t.schedule_type.value,
+                t.schedule_value,
+                t.action,
+                t.target_path,
+            ])
+    console.print()
+    console.print(create_table("调度任务", ["名称", "类型", "调度值", "操作", "目标"], task_rows))
+    console.print()
+
+    print_info("按 Ctrl+C 停止调度器")
+    console.print()
+
+    try:
+        scheduler.start(blocking=True)
+    except KeyboardInterrupt:
+        scheduler.stop()
+        console.print()
+        print_success("调度器已停止")
+
+        results = scheduler.get_results(20)
+        if results:
+            result_rows = []
+            for r in results:
+                result_rows.append([
+                    r.get("task_name", "-"),
+                    r.get("action", "-"),
+                    "[green]成功[/green]" if r.get("success") else "[red]失败[/red]",
+                    r.get("executed_at", "-")[:19],
+                ])
+            console.print()
+            console.print(create_table("执行历史", ["任务", "操作", "结果", "时间"], result_rows))
+        scheduler.save_results()
 
     console.print()
 

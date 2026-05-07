@@ -15,7 +15,11 @@
       "Bash(dq plugins *)",
       "Bash(dq doctor *)",
       "Bash(dq pipeline *)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(git *)",
+      "Bash(xargs wc -l)",
+      "Read(//c/Users/13033/Desktop/c++/**)",
+      "Bash(mkdir -p \"C:/Users/13033/Desktop/c++\")"
     ]
   }
 }

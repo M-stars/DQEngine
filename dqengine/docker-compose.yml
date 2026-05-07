@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  dqengine:
+    build: .
+    container_name: dqengine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      - ./reports:/reports
+      - ./logs:/logs
+      - ./configs:/app/configs
+    environment:
+      - DQENGINE_ENV=prod
+      - DQENGINE_LOG_LEVEL=INFO
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+
+  # Redis 缓存 (可选)
+  redis:
+    image: redis:7-alpine
+    container_name: dqengine-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    profiles:
+      - full
+
+  # PostgreSQL 存储 (可选)
+  postgres:
+    image: postgres:16-alpine
+    container_name: dqengine-postgres
+    environment:
+      POSTGRES_DB: dqengine
+      POSTGRES_USER: dqengine
+      POSTGRES_PASSWORD: dqengine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    profiles:
+      - full
+
+volumes:
+  redis_data:
+  postgres_data:
