@@ -357,27 +357,7 @@ mypy dqengine/
 pre-commit install
 ```
 
-## Roadmap
 
-- [ ] Web Dashboard — 数据质量监控面板
-- [ ] Data Lineage — 数据血缘可视化
-- [ ] PostgreSQL 深度集成
-- [ ] Docker 容器化部署
-- [ ] Apache Spark 支持
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request。确保代码通过：
-
-```bash
-pytest tests/ -v
-black dqengine/ tests/ --line-length=100 --check
-ruff check dqengine/ tests/
-```
-
-## License
-
-MIT License
 
 ---
 
