@@ -119,6 +119,13 @@ class MissingValueCleaner:
                 fill_details[col] = "skipped: no valid values to compute fill"
                 continue
 
+            # pandas rejects non-integral fill values for (nullable) integer
+            # dtypes, which would crash the whole cleaning run.
+            if pd.api.types.is_integer_dtype(df_clean[col]) and not isinstance(
+                fill_value, int
+            ):
+                fill_value = int(round(float(fill_value)))
+
             df_clean[col] = df_clean[col].fillna(fill_value)
             changes += null_count
             affected_cols += 1
