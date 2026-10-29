@@ -173,6 +173,10 @@ class DriftDetector:
         results: List[ColumnDriftResult] = []
         common_cols = set(baseline_df.columns) & set(current_df.columns)
 
+        # 延迟导入但不吞 ImportError: scipy 损坏时必须大声失败,
+        # 否则异常被逐列 continue 吞掉, 输出"零漂移"的假报告
+        from scipy import stats
+
         for col in common_cols:
             if not pd.api.types.is_numeric_dtype(baseline_df[col]):
                 continue
@@ -184,8 +188,6 @@ class DriftDetector:
                 continue
 
             try:
-                from scipy import stats
-
                 ks_stat, ks_pvalue = stats.ks_2samp(b_data, c_data)
             except Exception:
                 continue
