@@ -10,7 +10,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-import pandas as pd
 import yaml
 
 from dqengine.core.loader import DataLoader
@@ -25,7 +24,6 @@ from dqengine.models.schemas import (
 from dqengine.repair.date_standardizer import DateStandardizer
 from dqengine.repair.duplicate import DuplicateCleaner
 from dqengine.repair.missing_value import MissingValueCleaner
-from dqengine.repair.outlier import OutlierDetector
 from dqengine.report.generator import ReportGenerator
 
 

@@ -6,13 +6,11 @@ import json
 import os
 import threading
 from urllib import request as _url_request
-import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
-import pandas as pd
 
 from dqengine.core.loader import DataLoader
 from dqengine.core.profiler import Profiler
@@ -20,11 +18,8 @@ from dqengine.core.scorer import QualityScorer
 from dqengine.drift.detector import DriftDetector
 from dqengine.utils.logger import get_logger
 from dqengine.models.schemas import (
-    DriftReport,
     MonitorEvent,
     MonitorSession,
-    ProfileResult,
-    QualityScore,
     QualityTrend,
 )
 

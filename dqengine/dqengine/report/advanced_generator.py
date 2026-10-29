@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -107,8 +107,8 @@ class AdvancedReportGenerator:
             HTML 文件路径.
         """
         try:
-            import plotly.graph_objects as go
-            from plotly.subplots import make_subplots
+            import plotly.graph_objects  # noqa: F401  (可用性探测, ImportError 走降级路径)
+            import plotly.subplots  # noqa: F401
 
             charts_html = self._generate_plotly_charts(profile, score, outliers, df)
         except ImportError:
@@ -157,7 +157,6 @@ class AdvancedReportGenerator:
             图表 HTML 字符串.
         """
         import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
 
         charts = []
 

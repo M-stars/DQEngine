@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
 import os
 
@@ -21,11 +20,6 @@ from dqengine.drift.detector import DriftDetector
 from dqengine.observability.telemetry import TelemetryManager
 from dqengine.models.schemas import (
     APIResponse,
-    CleanRequest,
-    DriftReport,
-    DriftRequest,
-    ProfileRequest,
-    ValidateRequest,
 )
 from dqengine.repair.date_standardizer import DateStandardizer
 from dqengine.repair.duplicate import DuplicateCleaner

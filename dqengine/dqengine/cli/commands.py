@@ -4,21 +4,18 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import typer
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table as RichTable
 
 from dqengine import __version__
 # 第二阶段模块 — 延迟导入以支持可选依赖
 from dqengine.models.schemas import (
     SemanticType,
-    DoctorResult,
     PluginType,
     AppConfig,
-    ReportFormat,
 )
 from dqengine.utils.console import (
     console,
@@ -190,7 +187,6 @@ def profile(
     console.print(create_table("质量维度", ["维度", "评分", "权重"], dim_rows))
 
     if output:
-        import json
         out_path = Path(output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(profile_result.model_dump_json(indent=2), encoding="utf-8")
@@ -414,7 +410,6 @@ def semantic(
     result = detector.detect(df, file_path=str(path))
 
     # 显示结果
-    from dqengine.models.schemas import SemanticType
 
     recognized = [f for f in result.fields if f.detected_type != SemanticType.UNKNOWN]
     unknown = [f for f in result.fields if f.detected_type == SemanticType.UNKNOWN]

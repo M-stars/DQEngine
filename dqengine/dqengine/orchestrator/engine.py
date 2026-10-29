@@ -24,7 +24,6 @@ from dqengine.models.schemas import (
 from dqengine.repair.date_standardizer import DateStandardizer
 from dqengine.repair.duplicate import DuplicateCleaner
 from dqengine.repair.missing_value import MissingValueCleaner
-from dqengine.repair.outlier import OutlierDetector
 from dqengine.report.advanced_generator import AdvancedReportGenerator
 from dqengine.rules.validator import RuleValidator
 from dqengine.semantic.detector import SemanticDetector

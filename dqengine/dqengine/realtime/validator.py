@@ -6,12 +6,12 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Iterator, Optional
 
 import pandas as pd
 
 from dqengine.utils.logger import get_logger
-from dqengine.models.schemas import StreamEvent, StreamValidationResult
+from dqengine.models.schemas import StreamValidationResult
 from dqengine.rules.validator import RuleValidator
 
 

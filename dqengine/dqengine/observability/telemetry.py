@@ -245,7 +245,6 @@ class TelemetryManager:
 
     def export_prometheus(self) -> str:
         """导出 Prometheus 格式指标 (含进程级内置指标)."""
-        import os
         import time as _time
 
         process = __import__("psutil") if False else None
