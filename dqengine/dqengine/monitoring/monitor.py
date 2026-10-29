@@ -176,6 +176,8 @@ class QualityMonitor:
         except KeyboardInterrupt:
             print(f"\n[监控] 停止轮询. 共处理 {self.session.total_files_processed} 个文件")
             self._save_trends()
+            # 向调用方传播, 让其执行停止后的收尾逻辑 (如生成趋势报告)
+            raise
 
     def start_watching(self) -> None:
         """Watchdog 模式: 实时文件监听."""
