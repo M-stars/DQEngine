@@ -93,6 +93,13 @@ class TestWebhook:
 
         class FakeUrlRequest:
             @staticmethod
+            def Request(url, data=None, headers=None, method=None):
+                class R:
+                    pass
+                R.data = data
+                return R
+
+            @staticmethod
             def urlopen(req, timeout=None):
                 captured.append(json.loads(req.data))
                 return FakeResp()
