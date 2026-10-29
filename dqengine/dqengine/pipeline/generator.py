@@ -182,16 +182,16 @@ class PipelineGenerator:
         if cleaning.missing.enabled:
             # 分析哪些列需要填充
             null_cols = [c.column_name for c in profile.columns if c.null_rate > 0]
+            fill_params: dict = {"strategy": cleaning.missing.strategy}
+            if cleaning.missing.constant_value is not None:
+                fill_params["constant_value"] = cleaning.missing.constant_value
             steps.append(
                 PipelineStep(
                     step_name="fill_missing_values",
                     module="dqengine.repair.missing_value",
                     class_name="MissingValueCleaner",
                     method="clean",
-                    parameters={
-                        "strategy": cleaning.missing.strategy,
-                        "nullable_columns": null_cols,
-                    },
+                    parameters=fill_params,
                     description=f"填充缺失值 (策略: {cleaning.missing.strategy}, "
                     f"受影响列: {len(null_cols)})",
                 )
@@ -207,10 +207,7 @@ class PipelineGenerator:
                     module="dqengine.repair.date_standardizer",
                     class_name="DateStandardizer",
                     method="standardize",
-                    parameters={
-                        "target_format": cleaning.date.target_format,
-                        "detected_date_columns": date_cols,
-                    },
+                    parameters={"target_format": cleaning.date.target_format},
                     description=f"标准化日期字段 (检测到 {len(date_cols)} 列: {date_cols})",
                 )
             )
@@ -273,14 +270,29 @@ class PipelineGenerator:
         calls_code = "\n".join(step_calls)
         total_steps = len(pipeline.steps) + 2  # load + save + cleaning steps
 
+        # Windows paths (C:\Users\...) form invalid \U escapes inside a
+        # regular docstring — normalize to forward slashes for embedding.
+        input_file = pipeline.input_file.replace("\\", "/")
+        output_file = pipeline.output_file.replace("\\", "/")
+
         return PIPELINE_TEMPLATE.format(
             generated_at=pipeline.generated_at,
-            input_file=pipeline.input_file,
-            output_file=pipeline.output_file,
+            input_file=input_file,
+            output_file=output_file,
             pipeline_steps=step_code,
             pipeline_calls=calls_code,
             step_count=total_steps,
         )
+
+    # Parameters each repair method actually accepts; anything else in
+    # step.parameters is informational and must not be forwarded, or the
+    # generated code would crash with an unexpected-keyword TypeError.
+    _METHOD_PARAMS: dict[tuple[str, str], tuple[str, ...]] = {
+        ("DuplicateCleaner", "clean"): ("keep",),
+        ("MissingValueCleaner", "clean"): ("strategy", "constant_value"),
+        ("DateStandardizer", "standardize"): ("target_format",),
+        ("OutlierDetector", "detect"): ("method", "threshold"),
+    }
 
     def _generate_step_function(self, step: PipelineStep, index: int) -> str:
         """生成单个步骤的函数代码.
@@ -292,9 +304,42 @@ class PipelineGenerator:
         Returns:
             函数定义源代码.
         """
+        accepted = self._METHOD_PARAMS.get((step.class_name, step.method), ())
         params_str = ", ".join(
-            f"{k}={repr(v)}" for k, v in step.parameters.items()
+            f"{k}={step.parameters[k]!r}" for k in accepted if k in step.parameters
         )
+        call_args = f"df, {params_str}" if params_str else "df"
+
+        # OutlierDetector.detect returns list[OutlierRecord], not a
+        # (df, result) tuple — the generated code must handle it accordingly.
+        if step.class_name == "OutlierDetector" and step.method == "detect":
+            action = step.parameters.get("action", "flag")
+            if action == "remove":
+                return f'''def {step.step_name}(df: pd.DataFrame) -> pd.DataFrame:
+    """Step {index}: {step.description}
+
+    使用 {step.class_name}.detect() + remove_outliers()
+    """
+    from {step.module} import {step.class_name}
+
+    detector = {step.class_name}()
+    outliers = detector.detect({call_args})
+    df_clean = detector.remove_outliers(df, outliers)
+    print(f"  [{step.step_name}] 检出 {{len(outliers)}} 个异常值, "
+          f"移除 {{len(df) - len(df_clean)}} 行")
+    return df_clean'''
+
+            return f'''def {step.step_name}(df: pd.DataFrame) -> pd.DataFrame:
+    """Step {index}: {step.description}
+
+    使用 {step.class_name}.detect()
+    """
+    from {step.module} import {step.class_name}
+
+    detector = {step.class_name}()
+    outliers = detector.detect({call_args})
+    print(f"  [{step.step_name}] 检出 {{len(outliers)}} 个异常值 (action=flag, 不修改数据)")
+    return df'''
 
         return f'''def {step.step_name}(df: pd.DataFrame) -> pd.DataFrame:
     """Step {index}: {step.description}
@@ -304,7 +349,7 @@ class PipelineGenerator:
     from {step.module} import {step.class_name}
 
     processor = {step.class_name}()
-    df_clean, result = processor.{step.method}(df)
+    df_clean, result = processor.{step.method}({call_args})
     print(f"  [{step.step_name}] {{result.changes_made}} 处变更, "
           f"{{result.columns_affected}} 列受影响")
     return df_clean'''
