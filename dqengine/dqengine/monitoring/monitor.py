@@ -278,9 +278,13 @@ class QualityMonitor:
         cutoff = datetime.now().timestamp() - hours * 3600
         return [t for t in self.session.trends if datetime.fromisoformat(t.timestamp).timestamp() > cutoff]
 
+    MAX_TRENDS = 1000
+
     def _save_trends(self) -> None:
-        """保存趋势数据."""
+        """保存趋势数据 (长驻会话: 内存与文件都只保留最近 MAX_TRENDS 条)."""
         if self.trends_file:
+            if len(self.session.trends) > self.MAX_TRENDS:
+                del self.session.trends[: len(self.session.trends) - self.MAX_TRENDS]
             data = [t.model_dump() for t in self.session.trends]
             self.trends_file.parent.mkdir(parents=True, exist_ok=True)
             self.trends_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

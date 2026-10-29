@@ -15,6 +15,14 @@ class BasePlugin(ABC):
 
     子类必须定义 PLUGIN_INFO 类属性.
 
+    性能约定:
+        处理 DataFrame 的 validate/clean 实现应遵循"向量化为默认、
+        循环仅限违规行"——用布尔掩码 (series.notna() / 比较 / isin /
+        str.contains) 做全列扫描, 只对命中的少量行构造结果对象;
+        逐行 for + pd.isna(val) 的标量分派约 1µs/次, 百万行数据
+        会放大为秒级开销 (核心库已按此约定改造, 见
+        rules/validator.py 与 repair/outlier.py).
+
     示例:
         class MyValidator(BaseValidator):
             PLUGIN_INFO = PluginInfo(
