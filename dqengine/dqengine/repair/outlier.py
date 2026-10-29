@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from dqengine.models.schemas import OutlierRecord
@@ -76,36 +77,28 @@ class OutlierDetector:
                 lower = mean - threshold * std
                 upper = mean + threshold * std
 
-            # 按位置遍历而非按标签索引: 重复/非整数索引标签下
-            # series[label] 会返回多值 Series 或截断, 导致崩溃或误判
-            for pos, val in enumerate(values):
-                if pd.isna(val):
-                    continue
+            # 向量化掩码: NaN 在比较中自动为 False, 与逐行跳过等价;
+            # 得到的是位置掩码, 对重复/非整数索引标签天然正确
+            if method == "iqr":
+                extreme_mask = (values < extreme_lower) | (values > extreme_upper)
+                mild_mask = (values < lower) | (values > upper)
+            else:  # zscore
+                z = ((values - mean) / std).abs()
+                extreme_mask = z > 2 * threshold
+                mild_mask = z > threshold
+            outlier_mask = (extreme_mask | mild_mask).fillna(False).to_numpy()
 
-                if method == "iqr":
-                    if val < extreme_lower or val > extreme_upper:
-                        severity = "extreme"
-                    elif val < lower or val > upper:
-                        severity = "mild"
-                    else:
-                        continue
-                else:  # zscore
-                    z = abs((val - mean) / std)
-                    if z > 2 * threshold:
-                        severity = "extreme"
-                    elif z > threshold:
-                        severity = "mild"
-                    else:
-                        continue
-
+            col_name = str(col)
+            for pos in np.flatnonzero(outlier_mask):
+                val = values.iloc[pos]
                 outliers.append(
                     OutlierRecord(
-                        column=str(col),
-                        row_index=pos,
+                        column=col_name,
+                        row_index=int(pos),
                         value=float(val),
                         lower_bound=round(float(lower), 4),
                         upper_bound=round(float(upper), 4),
-                        severity=severity,
+                        severity="extreme" if extreme_mask.iloc[pos] else "mild",
                     )
                 )
 
@@ -123,15 +116,15 @@ class OutlierDetector:
         Returns:
             DataFrame with outlier rows removed.
         """
-        positions = sorted({o.row_index for o in outliers})
+        positions = {o.row_index for o in outliers}
         if not positions or not len(df):
             return df.copy()
 
         n = len(df)
-        keep_mask = [True] * n
-        for pos in positions:
-            if 0 <= pos < n:
-                keep_mask[pos] = False
+        keep_mask = np.ones(n, dtype=bool)
+        valid = [p for p in positions if 0 <= p < n]
+        if valid:
+            keep_mask[np.asarray(valid, dtype=np.intp)] = False
         return df[pd.Series(keep_mask, index=df.index)].copy()
 
     def summary(self, outliers: list[OutlierRecord]) -> dict:
