@@ -46,8 +46,15 @@ class TaskScheduler:
         scheduler.start()
     """
 
-    def __init__(self, config: Optional[ScheduleConfig] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[ScheduleConfig] = None,
+        state_file: Optional[str] = None,
+    ) -> None:
         self.config = config or ScheduleConfig()
+        # 任务状态持久化: 重启后恢复 next_run, 避免 CRON 任务在重启后
+        # 因 next_run 为空被立即触发一次 (意外重跑副作用任务)
+        self.state_file = Path(state_file) if state_file else None
         self.tasks: Dict[str, ScheduledTask] = {
             t.task_id: t for t in self.config.tasks
         }
@@ -107,12 +114,70 @@ class TaskScheduler:
         """动态添加调度任务."""
         self.tasks[task.task_id] = task
         self.config.tasks.append(task)
+        self.save_state()
+
+    def save_state(self) -> None:
+        """持久化任务定义与调度状态 (next_run/last_run) 到 state_file."""
+        if not self.state_file:
+            return
+        data = {
+            "tasks": [
+                {
+                    "task_id": t.task_id,
+                    "name": t.name,
+                    "schedule_type": t.schedule_type.value,
+                    "schedule_value": t.schedule_value,
+                    "action": t.action,
+                    "target_path": t.target_path,
+                    "config_path": t.config_path,
+                    "enabled": t.enabled,
+                    "next_run": t.next_run,
+                    "last_run": t.last_run,
+                }
+                for t in self.tasks.values()
+            ]
+        }
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        self.state_file.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def load_state(self) -> int:
+        """从 state_file 恢复任务与调度状态.
+
+        Returns:
+            恢复的任务数 (无状态文件时为 0).
+        """
+        if not self.state_file or not self.state_file.exists():
+            return 0
+        data = json.loads(self.state_file.read_text(encoding="utf-8"))
+        restored = 0
+        for t in data.get("tasks", []):
+            task = ScheduledTask(
+                task_id=t["task_id"],
+                name=t["name"],
+                schedule_type=ScheduleType(t["schedule_type"]),
+                schedule_value=t["schedule_value"],
+                action=t["action"],
+                target_path=t["target_path"],
+                config_path=t.get("config_path"),
+                enabled=t.get("enabled", True),
+                next_run=t.get("next_run"),
+                last_run=t.get("last_run"),
+            )
+            if task.task_id not in self.tasks:
+                self.tasks[task.task_id] = task
+                self.config.tasks.append(task)
+                restored += 1
+        logger.info("已从 %s 恢复 %d 个调度任务", self.state_file, restored)
+        return restored
 
     def remove_task(self, task_id: str) -> bool:
         """移除调度任务."""
         if task_id in self.tasks:
             del self.tasks[task_id]
             self.config.tasks = [t for t in self.config.tasks if t.task_id != task_id]
+            self.save_state()
             return True
         return False
 
@@ -190,6 +255,7 @@ class TaskScheduler:
     def start(self, blocking: bool = True) -> None:
         """启动调度器."""
         self._running = True
+        self.load_state()
         logger.info(f"[调度器] 启动: {len(self.tasks)} 个任务")
 
         # 使用 APScheduler (如果可用)
@@ -316,6 +382,7 @@ class TaskScheduler:
             if len(self._results) > 1000:
                 del self._results[: len(self._results) - 1000]
             self.update_next_run(task)
+            self.save_state()
         except Exception as e:
             logger.error(f"[调度器] 任务失败 [{task.name}]: {e}")
             self._results.append(
