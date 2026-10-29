@@ -221,21 +221,15 @@ def create_app() -> FastAPI:
         baseline_df = await _read_uploaded_file(baseline)
         current_df = await _read_uploaded_file(current)
 
-        # 保存临时文件用于漂移检测; detect 抛异常时也必须清理,
-        # 否则每次失败请求泄漏 2 个临时文件 (Windows 上还会锁目录)
-        bf_name = cf_name = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as bf, \
-                 tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as cf:
-                bf_name, cf_name = bf.name, cf.name
-                baseline_df.to_csv(bf.name, index=False)
-                current_df.to_csv(cf.name, index=False)
-                report = drift_detector.detect(bf.name, cf.name)
-        finally:
-            if bf_name:
-                Path(bf_name).unlink(missing_ok=True)
-            if cf_name:
-                Path(cf_name).unlink(missing_ok=True)
+        # 内存直读: 此前 to_csv 落盘再 read_csv 读回, 每请求多付
+        # 两次完整序列化 + 两次解析 (1M 行量级约 6s 纯磁盘 I/O);
+        # 临时文件泄漏路径随落盘逻辑一并消除
+        report = drift_detector.detect_frames(
+            baseline_df,
+            current_df,
+            baseline_name=baseline.filename or "baseline",
+            current_name=current.filename or "current",
+        )
 
         return JSONResponse(content=report.model_dump())
 
@@ -275,19 +269,9 @@ def create_app() -> FastAPI:
         return Response(content=content, media_type=media_types.get(format, "text/html"))
 
     async def _read_uploaded_file(file: UploadFile) -> pd.DataFrame:
-        """读取上传文件为 DataFrame."""
+        """读取上传文件为 DataFrame (内存直读, 免临时落盘往返)."""
         content = await file.read()
-        suffix = Path(file.filename or "data.csv").suffix.lower()
-
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-
-        try:
-            df = loader.load(Path(tmp_path))
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-
-        return df
+        file_name = file.filename or "data.csv"
+        return loader.load_bytes(content, file_name)
 
     return app
