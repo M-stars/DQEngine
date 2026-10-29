@@ -16,6 +16,7 @@ import yaml
 from dqengine.core.loader import DataLoader
 from dqengine.core.profiler import Profiler
 from dqengine.core.scorer import QualityScorer
+from dqengine.utils.logger import get_logger
 from dqengine.models.schemas import (
     ScheduledTask,
     ScheduleConfig,
@@ -26,6 +27,9 @@ from dqengine.repair.duplicate import DuplicateCleaner
 from dqengine.repair.missing_value import MissingValueCleaner
 from dqengine.repair.outlier import OutlierDetector
 from dqengine.report.generator import ReportGenerator
+
+
+logger = get_logger(__name__)
 
 
 class TaskScheduler:
@@ -132,8 +136,10 @@ class TaskScheduler:
             from croniter import croniter
             return croniter(expr, after).get_next(datetime).isoformat()
         except ImportError:
-            print("[调度器] 警告: croniter 未安装, cron 任务退化为每 5 分钟执行 "
-                  "(pip install croniter 可按表达式调度)")
+            logger.warning(
+                "croniter 未安装, cron 任务退化为每 5 分钟执行 "
+                "(pip install croniter 可按表达式调度)"
+            )
             from datetime import timedelta
             return (after + timedelta(minutes=5)).isoformat()
 
@@ -184,13 +190,13 @@ class TaskScheduler:
     def start(self, blocking: bool = True) -> None:
         """启动调度器."""
         self._running = True
-        print(f"[调度器] 启动: {len(self.tasks)} 个任务")
+        logger.info("[调度器] 启动: {len(self.tasks)} 个任务")
 
         # 使用 APScheduler (如果可用)
         try:
             self._start_apscheduler(blocking)
         except ImportError:
-            print("[调度器] APScheduler 未安装，使用内置轮询模式")
+            logger.info("[调度器] APScheduler 未安装，使用内置轮询模式")
             if blocking:
                 self._start_polling()
             else:
@@ -225,8 +231,10 @@ class TaskScheduler:
             elif task.schedule_type == ScheduleType.INTERVAL:
                 trigger = IntervalTrigger(seconds=int(task.schedule_value))
             else:
-                print(f"[调度器] 警告: APScheduler 模式暂不支持 watch 任务 [{task.name}]，"
-                      f"请改用 blocking 轮询模式")
+                logger.warning(
+                    "APScheduler 模式暂不支持 watch 任务 [%s], 请改用 blocking 轮询模式",
+                    task.name,
+                )
                 continue
 
             scheduler.add_job(
@@ -238,7 +246,7 @@ class TaskScheduler:
             )
 
         scheduler.start()
-        print(f"[调度器] APScheduler 已启动")
+        logger.info("[调度器] APScheduler 已启动")
 
         try:
             if blocking:
@@ -246,7 +254,7 @@ class TaskScheduler:
                     time.sleep(1)
         except KeyboardInterrupt:
             scheduler.shutdown()
-            print(f"\n[调度器] 已停止")
+            logger.info("\n[调度器] 已停止")
 
     def _start_polling(self) -> None:
         """内置轮询模式."""
@@ -274,12 +282,12 @@ class TaskScheduler:
                         should_run = self._watch_has_changes(task)
 
                     if should_run:
-                        print(f"[调度器] 执行任务: {task.name} ({task.action})")
+                        logger.info("[调度器] 执行任务: {task.name} ({task.action})")
                         self._execute_task(task)
 
                 time.sleep(10)
         except KeyboardInterrupt:
-            print(f"\n[调度器] 已停止")
+            logger.info("\n[调度器] 已停止")
 
     def stop(self) -> None:
         """停止调度器."""
@@ -288,7 +296,7 @@ class TaskScheduler:
             try:
                 self._apscheduler.shutdown(wait=False)
             except Exception as e:
-                print(f"[调度器] APScheduler 关闭异常: {e}")
+                logger.info("[调度器] APScheduler 关闭异常: {e}")
             finally:
                 self._apscheduler = None
 
@@ -297,7 +305,7 @@ class TaskScheduler:
         try:
             executor = self._executors.get(task.action)
             if executor is None:
-                print(f"[调度器] 未知操作: {task.action}")
+                logger.info("[调度器] 未知操作: {task.action}")
                 return
 
             result = executor(task)
@@ -309,7 +317,7 @@ class TaskScheduler:
                 del self._results[: len(self._results) - 1000]
             self.update_next_run(task)
         except Exception as e:
-            print(f"[调度器] 任务失败 [{task.name}]: {e}")
+            logger.error("[调度器] 任务失败 [{task.name}]: {e}")
             self._results.append(
                 {
                     "task_id": task.task_id,

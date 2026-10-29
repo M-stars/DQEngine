@@ -17,6 +17,7 @@ from dqengine.core.loader import DataLoader
 from dqengine.core.profiler import Profiler
 from dqengine.core.scorer import QualityScorer
 from dqengine.drift.detector import DriftDetector
+from dqengine.utils.logger import get_logger
 from dqengine.models.schemas import (
     DriftReport,
     MonitorEvent,
@@ -25,6 +26,9 @@ from dqengine.models.schemas import (
     QualityScore,
     QualityTrend,
 )
+
+
+logger = get_logger(__name__)
 
 
 class QualityMonitor:
@@ -160,7 +164,7 @@ class QualityMonitor:
                     )
             except Exception as e:
                 # 漂移是监控的核心告警能力, 失败必须可见, 否则静默漏报
-                print(f"[监控] 漂移检测失败 [{file_path.name}]: {e}")
+                logger.error("[监控] 漂移检测失败 [{file_path.name}]: {e}")
 
         # 阈值告警
         if score.overall_score < 60:
@@ -182,7 +186,7 @@ class QualityMonitor:
             try:
                 cb(event)
             except Exception as e:
-                print(f"[监控] 回调执行失败: {e}")
+                logger.error("[监控] 回调执行失败: {e}")
 
         return event
 
@@ -194,23 +198,24 @@ class QualityMonitor:
         import time as _time
 
         interval_seconds = max(1, int(interval_seconds))
-        print(f"[监控] 开始轮询: {self.watch_dir} (间隔: {interval_seconds}s)")
-        print(f"[监控] 会话 ID: {self.session.session_id}")
+        logger.info("[监控] 开始轮询: {self.watch_dir} (间隔: {interval_seconds}s)")
+        logger.info("[监控] 会话 ID: {self.session.session_id}")
         try:
             while True:
                 events = self.scan_directory()
                 if events:
                     for e in events:
                         if e.score:
-                            print(
-                                f"  [{e.timestamp[:19]}] {Path(e.file_path).name} "
-                                f"评分: {e.score.overall_score:.1f} "
-                                f"漂移: {'⚠' if e.drift_detected else '✓'}"
+                            logger.info(
+                                "%s 评分: %.1f 漂移: %s",
+                                Path(e.file_path).name,
+                                e.score.overall_score,
+                                "是" if e.drift_detected else "否",
                             )
                 self._save_trends()
                 _time.sleep(interval_seconds)
         except KeyboardInterrupt:
-            print(f"\n[监控] 停止轮询. 共处理 {self.session.total_files_processed} 个文件")
+            logger.info("\n[监控] 停止轮询. 共处理 {self.session.total_files_processed} 个文件")
             self._save_trends()
             # 向调用方传播, 让其执行停止后的收尾逻辑 (如生成趋势报告)
             raise
@@ -221,7 +226,7 @@ class QualityMonitor:
             from watchdog.events import FileSystemEventHandler
             from watchdog.observers import Observer
         except ImportError:
-            print("[监控] watchdog 未安装, 回退到轮询模式")
+            logger.info("[监控] watchdog 未安装, 回退到轮询模式")
             self.start_polling()
             return
 
@@ -236,7 +241,7 @@ class QualityMonitor:
                     return
                 if str(path) in monitor._processed_files:
                     return
-                print(f"[监控] 检测到新文件: {path.name}")
+                logger.info("[监控] 检测到新文件: {path.name}")
                 try:
                     monitor._process_file(path)
                     monitor._save_trends()
@@ -246,9 +251,9 @@ class QualityMonitor:
                     # 而不是永久漏检
                     if attempt < 3:
                         delay = 5 * (attempt + 1)
-                        print(
-                            f"[监控] 处理失败 (可能仍在写入): {path.name} - {e}, "
-                            f"{delay}s 后重试 ({attempt + 1}/3)"
+                        logger.warning(
+                            "处理失败 (可能仍在写入): %s - %s, %ds 后重试 (%d/3)",
+                            path.name, e, delay, attempt + 1,
                         )
                         timer = threading.Timer(
                             delay, self_2.on_created, args=(event,), kwargs={"attempt": attempt + 1}
@@ -256,10 +261,10 @@ class QualityMonitor:
                         timer.daemon = True
                         timer.start()
                     else:
-                        print(f"[监控] 处理失败, 已放弃: {path.name} - {e}")
+                        logger.error("[监控] 处理失败, 已放弃: {path.name} - {e}")
 
-        print(f"[监控] 开始 Watchdog 监听: {self.watch_dir}")
-        print(f"[监控] 会话 ID: {self.session.session_id}")
+        logger.info("[监控] 开始 Watchdog 监听: {self.watch_dir}")
+        logger.info("[监控] 会话 ID: {self.session.session_id}")
 
         observer = Observer()
         observer.schedule(DataFileHandler(), str(self.watch_dir), recursive=True)
@@ -270,7 +275,7 @@ class QualityMonitor:
                 observer.join(1)
         except KeyboardInterrupt:
             observer.stop()
-            print(f"\n[监控] 停止监听")
+            logger.info("\n[监控] 停止监听")
         observer.join()
 
     def get_trends(self, hours: int = 24) -> List[QualityTrend]:
