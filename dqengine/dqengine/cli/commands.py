@@ -188,7 +188,7 @@ def profile(
     if output:
         import json
         out_path = Path(output)
-        out_path.write_text(profile_result.model_dump_json(indent=2, encoding="utf-8"))
+        out_path.write_text(profile_result.model_dump_json(indent=2), encoding="utf-8")
         print_success(f"画像已保存至: {out_path}")
 
     console.print()
@@ -397,7 +397,7 @@ def semantic(
 
     if output:
         out_path = Path(output)
-        out_path.write_text(result.model_dump_json(indent=2, encoding="utf-8"))
+        out_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         print_success(f"语义分析结果已保存: {out_path}")
 
     console.print()
@@ -1068,7 +1068,7 @@ def run_pipeline(
 
     if output:
         out_path = Path(output)
-        out_path.write_text(result.model_dump_json(indent=2, encoding="utf-8"))
+        out_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         print_success(f"结果已保存: {out_path}")
 
     if not result.success:
