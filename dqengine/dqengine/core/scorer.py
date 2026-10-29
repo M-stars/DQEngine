@@ -85,9 +85,12 @@ class QualityScorer:
             return 100.0
 
         scores = []
+        # Profiler stores column names as str(); the df may use non-string
+        # labels (e.g. integer columns from JSON array input), so map back.
+        col_lookup = {str(c): c for c in df.columns}
         for col in profile.columns:
             col_score = 100.0
-            series = df[col.column_name]
+            series = df[col_lookup[col.column_name]]
 
             # Penalize mixed types
             if series.dtype == "object":
