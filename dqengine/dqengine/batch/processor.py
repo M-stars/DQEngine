@@ -10,9 +10,23 @@ from typing import List, Optional
 try:
     from tqdm import tqdm
 except ImportError:
-    # 如果tqdm未安装,使用简单的迭代器
-    def tqdm(iterable, **kwargs):
-        return iterable
+    class tqdm:
+        """tqdm 缺失时的最小降级实现 (支持 with 协议与空操作更新)."""
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def update(self, n=1):
+            pass
+
+        def set_postfix_str(self, s, refresh=True):
+            pass
 
 from dqengine.core.loader import DataLoader
 from dqengine.core.profiler import Profiler
@@ -273,6 +287,7 @@ class BatchProcessor:
         Returns:
             BatchFileResult.
         """
+        clean_path = out_dir / (clean_name or f"cleaned_{file_path.stem}.csv")
         try:
             # 1. 加载
             df = self.loader.load(file_path)
@@ -309,7 +324,6 @@ class BatchProcessor:
             score_after = self.scorer.score(df, profile_after)
 
             # 5. 保存清洗结果
-            clean_path = out_dir / (clean_name or f"cleaned_{file_path.stem}.csv")
             df.to_csv(clean_path, index=False, encoding="utf-8")
 
             return BatchFileResult(
@@ -324,6 +338,13 @@ class BatchProcessor:
 
         except Exception as e:
             logger.error("处理文件失败 %s: %s", file_path.name, str(e))
+            # 失败文件的输出不可信: 清掉本轮目标名 (可能是半截写入,
+            # 或上一轮成功但源文件现已损坏的陈旧输出, 避免下游误用)
+            stale = out_dir / (clean_name or f"cleaned_{file_path.stem}.csv")
+            try:
+                stale.unlink(missing_ok=True)
+            except OSError:
+                pass
             return BatchFileResult(
                 file_path=str(file_path),
                 success=False,
