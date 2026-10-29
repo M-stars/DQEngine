@@ -57,14 +57,19 @@ class CustomPhoneValidator(BaseValidator):
         for idx, val in df[column].items():
             if pd.isna(val):
                 continue
-            if not self.CHINESE_PHONE_PATTERN.match(str(val).strip()):
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                # Excel/CSV 数值单元格读入为 float（如 13812345678.0），
+                # 直接 str() 会带 ".0" 导致合法手机号全部误判
+                val = int(val)
+            text = str(val).strip()
+            if not self.CHINESE_PHONE_PATTERN.match(text):
                 violations.append(
                     RuleViolation(
                         column=column,
                         rule_type="custom_phone",
                         row_index=int(idx),
-                        value=str(val),
-                        message=f"'{val}' 不是合法的中国手机号",
+                        value=text,
+                        message=f"'{text}' 不是合法的中国手机号",
                     )
                 )
 
