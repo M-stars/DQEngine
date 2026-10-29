@@ -96,8 +96,12 @@ class QualityScorer:
             if series.dtype == "object":
                 non_null = series.dropna()
                 if len(non_null) > 0:
-                    type_counts = non_null.map(type).value_counts()
-                    dominant_ratio = type_counts.iloc[0] / len(non_null)
+                    # map(type) 是逐元素 Python 调用 (80ms/百万行/列),
+                    # score 每轮清洗调用 2 次; 评分本就是启发式指标,
+                    # 抽样估计主导类型占比即可 (10 万行内近似精确)
+                    sample = non_null.head(100_000)
+                    type_counts = sample.map(type).value_counts()
+                    dominant_ratio = type_counts.iloc[0] / len(sample)
                     col_score *= 0.7 + 0.3 * dominant_ratio
 
             # Penalize extreme null rates
