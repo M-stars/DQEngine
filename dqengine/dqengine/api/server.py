@@ -22,6 +22,7 @@ from dqengine.models.schemas import (
     APIResponse,
 )
 from dqengine.repair.date_standardizer import DateStandardizer
+from dqengine.models.schemas import RepairResult
 from dqengine.repair.duplicate import DuplicateCleaner
 from dqengine.repair.missing_value import MissingValueCleaner
 from dqengine.repair.outlier import OutlierDetector
@@ -200,9 +201,22 @@ def create_app() -> FastAPI:
         file: UploadFile = File(...),
         config_path: Optional[str] = Query(None),
     ) -> JSONResponse:
-        """上传数据文件并执行自动清洗."""
+        """上传数据文件并执行自动清洗.
+
+        config_path 提供服务器端 YAML 配置时, 各清洗步骤的启用开关
+        与策略参数 (strategy/method/threshold/action) 全部生效.
+        """
         df = await _read_uploaded_file(file)
         rows_before = len(df)
+
+        cleaning = None
+        if config_path:
+            from dqengine.services.config_manager import ConfigManager
+
+            cleaning = ConfigManager().load(config_path).cleaning
+
+        def _enabled(part) -> bool:
+            return cleaning is None or part.enabled
 
         # 执行清洗步骤
         missing_cleaner = MissingValueCleaner()
@@ -210,10 +224,49 @@ def create_app() -> FastAPI:
         date_std = DateStandardizer()
         outlier_detector = OutlierDetector()
 
-        df, repair1 = missing_cleaner.clean(df)
-        df, repair2 = dup_cleaner.clean(df)
-        df, report3 = date_std.standardize(df)
-        outliers = outlier_detector.detect(df)
+        m_enabled = cleaning is None or cleaning.missing.enabled
+        d_enabled = cleaning is None or cleaning.duplicate.enabled
+        date_enabled = cleaning is None or cleaning.date.enabled
+
+        def _skipped(operation: str) -> RepairResult:
+            return RepairResult(
+                operation=operation,
+                rows_before=rows_before,
+                rows_after=len(df),
+                columns_affected=0,
+                changes_made=0,
+                details={"skipped": "disabled by config"},
+            )
+
+        if m_enabled:
+            df, repair1 = missing_cleaner.clean(
+                df,
+                strategy=cleaning.missing.strategy if cleaning else "mean",
+                constant_value=cleaning.missing.constant_value if cleaning else None,
+            )
+        else:
+            repair1 = _skipped("missing_value_fill")
+        if d_enabled:
+            df, repair2 = dup_cleaner.clean(
+                df, keep=cleaning.duplicate.keep if cleaning else "first"
+            )
+        else:
+            repair2 = _skipped("duplicate_removal")
+        if date_enabled:
+            df, report3 = date_std.standardize(
+                df, target_format=cleaning.date.target_format if cleaning else "%Y-%m-%d"
+            )
+        else:
+            report3 = _skipped("date_standardization")
+        outliers = []
+        if cleaning is None or (cleaning.outlier.enabled and cleaning.outlier.action in ("flag", "remove")):
+            outliers = outlier_detector.detect(
+                df,
+                method=cleaning.outlier.method if cleaning else "iqr",
+                threshold=cleaning.outlier.threshold if cleaning else 1.5,
+            )
+            if cleaning and cleaning.outlier.action == "remove" and outliers:
+                df = outlier_detector.remove_outliers(df, outliers)
 
         score_after = scorer.score(df, profiler.profile(df))
         rows_after = len(df)

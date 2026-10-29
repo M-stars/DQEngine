@@ -23,22 +23,22 @@ def create_table(title: str, columns: list[str], rows: list[list[str]]) -> Table
 
 def print_success(message: str) -> None:
     """Print a success message."""
-    console.print(f"[bold green][OK][/bold green] {message}")
+    console.print(f"[bold green][OK][/bold green] {escape(message)}")
 
 
 def print_error(message: str) -> None:
     """Print an error message."""
-    console.print(f"[bold red][ERROR][/bold red] {message}")
+    console.print(f"[bold red][ERROR][/bold red] {escape(message)}")
 
 
 def print_warning(message: str) -> None:
     """Print a warning message."""
-    console.print(f"[bold yellow][WARN][/bold yellow] {message}")
+    console.print(f"[bold yellow][WARN][/bold yellow] {escape(message)}")
 
 
 def print_info(message: str) -> None:
     """Print an informational message."""
-    console.print(f"[bold blue][INFO][/bold blue] {message}")
+    console.print(f"[bold blue][INFO][/bold blue] {escape(message)}")
 
 
 def render_score_gauge(score: float, title: str = "Data Quality Score") -> Panel:

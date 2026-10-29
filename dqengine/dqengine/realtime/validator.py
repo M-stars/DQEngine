@@ -93,8 +93,9 @@ class StreamValidator:
         if self.validator and self.rules_path:
             stream_rules = self.validator.load_rules(self.rules_path)
 
-        # 支持单条对象或对象数组
-        if isinstance(events_data, dict):
+        # 支持单条对象或对象数组; 标量/字符串等非法形态包成单事件,
+        # 由下方非 dict 防护统一产出失败事件而非 TypeError 崩溃
+        if isinstance(events_data, (dict, str, int, float, bool)) or events_data is None:
             events_data = [events_data]
 
         count = 0

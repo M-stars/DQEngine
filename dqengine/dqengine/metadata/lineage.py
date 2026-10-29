@@ -106,6 +106,8 @@ class LineageTracker:
         records = self._executions
         if rule_name:
             records = [r for r in records if r.rule_name == rule_name]
+        if limit <= 0:
+            return []
         return records[-limit:]
 
     def save(self, output_path: str = "lineage.json") -> str:
@@ -145,10 +147,25 @@ class LineageTracker:
         if not lineage:
             raise ValueError(f"未知数据集: {dataset_id}")
 
+        from html import escape
+
+        # nodes_json 使用原始数据 (脚本内只需防 </ 逃逸, 已单独处理);
+        # HTML 注入防护: step 名/路径等用户可控文本先转义再进模板;
+        # JSON 块已在 nodes_json 处对 </ 做了脚本逃逸防护
+        lineage = lineage.model_copy(deep=True)
+        lineage.dataset_id = escape(str(lineage.dataset_id))
+        lineage.source_path = escape(str(lineage.source_path))
+        for _s in lineage.steps:
+            _s.step_id = escape(str(_s.step_id))
+            _s.step_name = escape(str(_s.step_name))
+            _s.input_data = escape(str(_s.input_data))
+            _s.output_data = escape(str(_s.output_data))
+            _s.operation = escape(str(_s.operation))
+
         nodes_json = json.dumps([
             {"id": step.step_id, "label": step.step_name, "title": step.operation}
             for step in lineage.steps
-        ])
+        ]).replace("</", "<\/")  # 防止 step 名等含 </script> 逃逸脚本上下文
         edges_json = json.dumps([
             {"from": lineage.steps[i].step_id, "to": lineage.steps[i + 1].step_id}
             for i in range(len(lineage.steps) - 1)
