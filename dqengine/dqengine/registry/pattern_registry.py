@@ -157,17 +157,27 @@ class PatternRegistry:
     def register(self, pattern: SemanticPattern) -> None:
         """注册自定义语义模式.
 
+        同名自定义模式会被替换；自定义模式同时存在于 _custom_patterns
+        与 _patterns 两个列表，替换时按对象身份同步移除旧实例，
+        避免全局模式列表重复累积.
+
         Args:
             pattern: SemanticPattern 实例.
         """
-        existing = [p for p in self._custom_patterns if p.name == pattern.name]
-        if existing:
-            self._custom_patterns.remove(existing[0])
+        for old in [p for p in self._custom_patterns if p.name == pattern.name]:
+            self._custom_patterns.remove(old)
+            for i, p in enumerate(self._patterns):
+                if p is old:
+                    self._patterns.pop(i)
+                    break
         self._custom_patterns.append(pattern)
         self._patterns.append(pattern)
 
     def unregister(self, name: str) -> bool:
         """移除自定义语义模式.
+
+        内置模式不可通过此方法移除；自定义模式会同时从
+        _custom_patterns 与 _patterns 中移除，确保立即失效.
 
         Args:
             name: 模式名称.
@@ -175,12 +185,14 @@ class PatternRegistry:
         Returns:
             是否成功移除.
         """
-        for p_list in [self._custom_patterns, self._patterns]:
-            for i, p in enumerate(p_list):
-                if p.name == name:
-                    p_list.pop(i)
-                    return True
-        return False
+        matching = [p for p in self._custom_patterns if p.name == name]
+        for old in matching:
+            self._custom_patterns.remove(old)
+            for i, p in enumerate(self._patterns):
+                if p is old:
+                    self._patterns.pop(i)
+                    break
+        return bool(matching)
 
     def get_all(self) -> List[SemanticPattern]:
         """获取所有已注册的语义模式 (内置 + 自定义), 按优先级排序."""
