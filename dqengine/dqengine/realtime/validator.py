@@ -139,18 +139,42 @@ class StreamValidator:
         rules_path: str,
         chunk_size: int = 1000,
     ) -> Iterator[StreamValidationResult]:
-        """批量 DataFrame 流式验证 (分块处理)."""
+        """批量 DataFrame 流式验证 (分块处理).
+
+        Args:
+            df: 输入 DataFrame.
+            rules_path: YAML 规则文件路径 (构造时未提供规则时也可在调用时指定).
+            chunk_size: 每块行数.
+
+        Yields:
+            StreamValidationResult: 每块的验证结果.
+        """
+        validator = self.validator
+        if validator is None:
+            if not rules_path:
+                raise ValueError(
+                    "未提供验证规则: 请在构造 StreamValidator 或调用 "
+                    "validate_batch_stream 时提供 rules_path"
+                )
+            validator = RuleValidator()
+            if not self.rules_path:
+                self.rules_path = rules_path
+                self.validator = validator
+
+        # 规则只加载一次，避免每个分块重复读文件
+        rules = validator.load_rules(rules_path)
+
         for i in range(0, len(df), chunk_size):
             chunk = df.iloc[i : i + chunk_size]
             event_id = f"batch_{i // chunk_size}"
 
             start = time.time()
-            result = self.validator.validate(chunk, rules_path) if self.validator else None
+            result = validator.validate(chunk, rules)
             elapsed = (time.time() - start) * 1000
 
             yield StreamValidationResult(
                 event_id=event_id,
-                passed=result.passed if result else True,
-                violations=result.violations if result else [],
+                passed=result.passed,
+                violations=result.violations,
                 processing_time_ms=round(elapsed, 4),
             )
