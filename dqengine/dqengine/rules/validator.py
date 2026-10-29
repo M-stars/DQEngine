@@ -84,6 +84,10 @@ class RuleValidator:
         """Convert YAML dict to list of ValidationRule objects."""
         rules: list[ValidationRule] = []
 
+        # 空 YAML 解析为 None, 顶层为列表等其他形态也无法提取 columns 键
+        if not isinstance(raw, dict):
+            return []
+
         columns_rules = raw.get("columns", {})
         for col_name, col_rules in columns_rules.items():
             if not isinstance(col_rules, dict):
@@ -160,19 +164,50 @@ class RuleValidator:
         """Validate numeric range."""
         violations = []
         series = pd.to_numeric(df[rule.column], errors="coerce")
-        min_val = rule.params.get("min")
-        max_val = rule.params.get("max")
 
-        for idx in series.index:
-            val = series[idx]
+        # 阈值规整为数值: YAML 中带引号的数字 ("18") 否则会与数值比较失败
+        try:
+            min_val = (
+                float(rule.params["min"]) if rule.params.get("min") is not None else None
+            )
+            max_val = (
+                float(rule.params["max"]) if rule.params.get("max") is not None else None
+            )
+        except (TypeError, ValueError) as e:
+            return [
+                RuleViolation(
+                    column=rule.column,
+                    rule_type="range",
+                    row_index=-1,
+                    value=None,
+                    message=f"规则阈值必须是数值: {e}",
+                )
+            ]
+
+        # 按位置遍历: 重复/非整数索引标签下 series[label] 会返回多值
+        # Series 或抛 int() 转换错误
+        for pos, (idx, val) in enumerate(series.items()):
             if pd.isna(val):
+                original = df[rule.column].iloc[pos]
+                if not pd.isna(original):
+                    # 原值存在但无法转为数值: 非数值垃圾必须报违规,
+                    # 否则 "abc" 会静默通过 min/max 校验
+                    violations.append(
+                        RuleViolation(
+                            column=rule.column,
+                            rule_type="range",
+                            row_index=pos,
+                            value=str(original),
+                            message=f"Value '{original}' is not numeric",
+                        )
+                    )
                 continue
             if min_val is not None and val < min_val:
                 violations.append(
                     RuleViolation(
                         column=rule.column,
                         rule_type="range",
-                        row_index=int(idx),
+                        row_index=pos,
                         value=float(val),
                         message=f"Value {val} < min({min_val})",
                     )
@@ -182,7 +217,7 @@ class RuleValidator:
                     RuleViolation(
                         column=rule.column,
                         rule_type="range",
-                        row_index=int(idx),
+                        row_index=pos,
                         value=float(val),
                         message=f"Value {val} > max({max_val})",
                     )
@@ -199,7 +234,8 @@ class RuleValidator:
         # Named patterns
         named_patterns = {
             "email": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
-            "phone": r"^\+?[\d\s\-()]{7,20}$",
+            # 要求至少 4 位数字, 否则 "-------"/连续空格等纯符号串也会通过
+            "phone": r"^(?=(?:\D*\d){4})\+?[\d\s\-()]{7,20}$",
             "url": r"^https?://[^\s/$.?#].[^\s]*$",
             "date": r"^\d{4}-\d{2}-\d{2}$",
         }
@@ -220,7 +256,7 @@ class RuleValidator:
                 )
             ]
 
-        for idx, val in df[rule.column].items():
+        for pos, (idx, val) in enumerate(df[rule.column].items()):
             if pd.isna(val):
                 continue
             if not compiled.search(str(val)):
@@ -228,7 +264,7 @@ class RuleValidator:
                     RuleViolation(
                         column=rule.column,
                         rule_type="regex",
-                        row_index=int(idx),
+                        row_index=pos,
                         value=str(val),
                         message=f"'{val}' does not match pattern '{rule.params.get('pattern')}'",
                     )
@@ -240,13 +276,13 @@ class RuleValidator:
     ) -> list[RuleViolation]:
         """Validate non-null constraint."""
         violations = []
-        for idx, val in df[rule.column].items():
+        for pos, (idx, val) in enumerate(df[rule.column].items()):
             if pd.isna(val):
                 violations.append(
                     RuleViolation(
                         column=rule.column,
                         rule_type="not_null",
-                        row_index=int(idx),
+                        row_index=pos,
                         value=None,
                         message=f"Null value found at row {idx}",
                     )
@@ -260,7 +296,7 @@ class RuleValidator:
         violations = []
         allowed: set[Any] = set(rule.params.get("values", []))
 
-        for idx, val in df[rule.column].items():
+        for pos, (idx, val) in enumerate(df[rule.column].items()):
             if pd.isna(val):
                 continue
             if val not in allowed:
@@ -268,7 +304,7 @@ class RuleValidator:
                     RuleViolation(
                         column=rule.column,
                         rule_type="allowed_values",
-                        row_index=int(idx),
+                        row_index=pos,
                         value=str(val),
                         message=f"'{val}' not in allowed values: {allowed}",
                     )

@@ -1,6 +1,7 @@
 """Rich-powered console utilities for DQEngine CLI output."""
 
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
@@ -14,7 +15,9 @@ def create_table(title: str, columns: list[str], rows: list[list[str]]) -> Table
     for col in columns:
         table.add_column(col, style="green")
     for row in rows:
-        table.add_row(*[str(c) for c in row])
+        # 用户数据可能含 "[bug]" 这类形如 markup 标签的文本,
+        # 不转义会被 rich 当作标签吞掉, 显示内容失真
+        table.add_row(*[escape(str(c)) for c in row])
     return table
 
 

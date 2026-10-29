@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -114,6 +115,13 @@ class BatchProcessor:
             BatchSummary 汇总结果.
         """
         files = self.collect_files(directory)
+        # 排除输出目录自身, 防止把上一次的清洗产物当输入重复处理
+        out_dir_resolved = Path(output_dir).resolve()
+        files = [
+            f
+            for f in files
+            if out_dir_resolved not in f.resolve().parents
+        ]
         if not files:
             logger.warning("未找到支持的数据文件")
             return BatchSummary(
@@ -130,12 +138,25 @@ class BatchProcessor:
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        # 预先分配输出文件名: 同名 stem (跨子目录或不同扩展名) 会
+        # 静默互相覆盖, 冲突时用源路径短哈希区分
+        stem_counts: dict = {}
+        for f in files:
+            stem_counts[f.stem] = stem_counts.get(f.stem, 0) + 1
+        name_map: dict = {}
+        for f in files:
+            if stem_counts[f.stem] == 1:
+                name_map[f] = f"cleaned_{f.stem}.csv"
+            else:
+                digest = hashlib.md5(str(f.resolve()).encode("utf-8")).hexdigest()[:6]
+                name_map[f] = f"cleaned_{f.stem}_{digest}.csv"
+
         results: List[BatchFileResult] = []
 
         if use_parallel and len(files) > 1:
-            results = self._process_parallel(files, out_dir)
+            results = self._process_parallel(files, out_dir, name_map)
         else:
-            results = self._process_sequential(files, out_dir)
+            results = self._process_sequential(files, out_dir, name_map)
 
         succeeded = [r for r in results if r.success]
         failed = [r for r in results if not r.success]
@@ -168,12 +189,15 @@ class BatchProcessor:
 
         return summary
 
-    def _process_sequential(self, files: List[Path], out_dir: Path) -> List[BatchFileResult]:
+    def _process_sequential(
+        self, files: List[Path], out_dir: Path, name_map: dict
+    ) -> List[BatchFileResult]:
         """顺序处理文件 (带进度条).
 
         Args:
             files: 文件列表.
             out_dir: 输出目录.
+            name_map: 源文件 -> 输出文件名.
 
         Returns:
             处理结果列表.
@@ -182,7 +206,7 @@ class BatchProcessor:
 
         with tqdm(total=len(files), desc="批量处理", unit="文件", ncols=100) as pbar:
             for f in files:
-                result = self._process_single_file(f, out_dir)
+                result = self._process_single_file(f, out_dir, name_map.get(f))
                 results.append(result)
                 status = "[OK]" if result.success else "[FAIL]"
                 pbar.set_postfix_str(f"{status} {f.name}")
@@ -190,30 +214,65 @@ class BatchProcessor:
 
         return results
 
-    def _process_parallel(self, files: List[Path], out_dir: Path) -> List[BatchFileResult]:
-        """并发处理文件.
+    def _process_parallel(
+        self, files: List[Path], out_dir: Path, name_map: dict
+    ) -> List[BatchFileResult]:
+        """线程池并发处理文件.
 
-        注意: 使用 ProcessPoolExecutor 时, 由于 pickle 限制,
-        实际回退到顺序处理但保持接口兼容.
+        批处理以文件读取/写盘等 I/O 为主, 线程池即可获得实际并发;
+        各文件间无共享状态, 结果在主线程汇总以保持输入顺序.
 
         Args:
             files: 文件列表.
             out_dir: 输出目录.
+            name_map: 源文件 -> 输出文件名.
 
         Returns:
-            处理结果列表.
+            处理结果列表 (按输入文件顺序).
         """
-        # 对于 I/O 密集型任务, 使用 ThreadPoolExecutor 替代
-        # 但考虑到跨平台兼容, 这里使用带进度条的顺序处理
-        logger.info("使用顺序处理模式 (多文件进度追踪)")
-        return self._process_sequential(files, out_dir)
+        results: List[BatchFileResult] = []
+        with tqdm(total=len(files), desc="批量处理", unit="文件", ncols=100) as pbar:
+            with ThreadPoolExecutor(max_workers=max(1, self.max_workers)) as executor:
+                future_to_file = {
+                    executor.submit(
+                        self._process_single_file, f, out_dir, name_map.get(f)
+                    ): f
+                    for f in files
+                }
+                for future in as_completed(future_to_file):
+                    f = future_to_file[future]
+                    try:
+                        results.append(future.result())
+                    except Exception as e:
+                        logger.error("并发处理异常 %s: %s", f.name, e)
+                        results.append(
+                            BatchFileResult(
+                                file_path=str(f),
+                                success=False,
+                                rows_before=0,
+                                rows_after=0,
+                                score_before=0,
+                                score_after=0,
+                                error=str(e),
+                            )
+                        )
+                    pbar.set_postfix_str(f.name)
+                    pbar.update(1)
 
-    def _process_single_file(self, file_path: Path, out_dir: Path) -> BatchFileResult:
+        # as_completed 顺序不定, 恢复为输入文件顺序
+        order = {f: i for i, f in enumerate(files)}
+        results.sort(key=lambda r: order.get(Path(r.file_path), 0))
+        return results
+
+    def _process_single_file(
+        self, file_path: Path, out_dir: Path, clean_name: "str | None" = None
+    ) -> BatchFileResult:
         """处理单个文件 (错误隔离).
 
         Args:
             file_path: 文件路径.
             out_dir: 输出目录.
+            clean_name: 输出文件名, 为 None 时按默认规则命名.
 
         Returns:
             BatchFileResult.
@@ -254,8 +313,7 @@ class BatchProcessor:
             score_after = self.scorer.score(df, profile_after)
 
             # 5. 保存清洗结果
-            clean_name = f"cleaned_{file_path.stem}.csv"
-            clean_path = out_dir / clean_name
+            clean_path = out_dir / (clean_name or f"cleaned_{file_path.stem}.csv")
             df.to_csv(clean_path, index=False, encoding="utf-8")
 
             return BatchFileResult(

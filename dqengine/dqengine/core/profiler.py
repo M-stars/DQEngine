@@ -78,12 +78,21 @@ class Profiler:
                 "max_val": None,
             }
         desc = series.describe()
+
+        def _num(key: str):
+            # 可空 dtype (Int64/Float64) 的全空列, describe 返回 pd.NA,
+            # float(pd.NA) 会抛 TypeError 中断整个画像
+            value = desc.get(key)
+            if value is None or pd.isna(value):
+                return None
+            return round(float(value), 2)
+
         return {
-            "mean": round(float(desc.get("mean", 0)), 2) if "mean" in desc else None,
-            "std": round(float(desc.get("std", 0)), 2) if "std" in desc else None,
-            "min_val": round(float(desc.get("min", 0)), 2) if "min" in desc else None,
-            "q25": round(float(desc.get("25%", 0)), 2) if "25%" in desc else None,
-            "q50": round(float(desc.get("50%", 0)), 2) if "50%" in desc else None,
-            "q75": round(float(desc.get("75%", 0)), 2) if "75%" in desc else None,
-            "max_val": round(float(desc.get("max", 0)), 2) if "max" in desc else None,
+            "mean": _num("mean"),
+            "std": _num("std"),
+            "min_val": _num("min"),
+            "q25": _num("25%"),
+            "q50": _num("50%"),
+            "q75": _num("75%"),
+            "max_val": _num("max"),
         }

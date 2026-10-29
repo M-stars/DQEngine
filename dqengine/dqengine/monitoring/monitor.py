@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -90,12 +91,12 @@ class QualityMonitor:
                     events.append(event)
 
         self.session.events.extend(events)
-        self.session.total_files_processed += len([e for e in events if e.profile is not None])
 
         return events
 
     def _process_file(self, file_path: Path) -> MonitorEvent:
         """处理单个文件."""
+        self.session.total_files_processed += 1
         df = self.loader.load(file_path)
         profile = self.profiler.profile(df, file_path=str(file_path))
         score = self.scorer.score(df, profile)
@@ -124,8 +125,9 @@ class QualityMonitor:
                     self.session.alerts.append(
                         f"漂移检测告警 [{file_path.name}]: {drift_report.overall_severity.value}"
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                # 漂移是监控的核心告警能力, 失败必须可见, 否则静默漏报
+                print(f"[监控] 漂移检测失败 [{file_path.name}]: {e}")
 
         # 阈值告警
         if score.overall_score < 60:
@@ -146,8 +148,8 @@ class QualityMonitor:
         for cb in self._callbacks:
             try:
                 cb(event)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[监控] 回调执行失败: {e}")
 
         return event
 
@@ -158,6 +160,7 @@ class QualityMonitor:
         """
         import time as _time
 
+        interval_seconds = max(1, int(interval_seconds))
         print(f"[监控] 开始轮询: {self.watch_dir} (间隔: {interval_seconds}s)")
         print(f"[监控] 会话 ID: {self.session.session_id}")
         try:
@@ -192,16 +195,35 @@ class QualityMonitor:
         monitor = self
 
         class DataFileHandler(FileSystemEventHandler):
-            def on_created(self_2, event):  # type: ignore
-                if not event.is_directory:
-                    path = Path(event.src_path)
-                    if path.suffix in QualityMonitor.SUPPORTED_EXTENSIONS:
-                        print(f"[监控] 检测到新文件: {path.name}")
-                        try:
-                            monitor._process_file(path)
-                            monitor._save_trends()
-                        except Exception as e:
-                            print(f"[监控] 处理失败: {path.name} - {e}")
+            def on_created(self_2, event, attempt: int = 0) -> None:  # type: ignore
+                if event.is_directory:
+                    return
+                path = Path(event.src_path)
+                if path.suffix not in QualityMonitor.SUPPORTED_EXTENSIONS:
+                    return
+                if str(path) in monitor._processed_files:
+                    return
+                print(f"[监控] 检测到新文件: {path.name}")
+                try:
+                    monitor._process_file(path)
+                    monitor._save_trends()
+                    monitor._processed_files.add(str(path))
+                except Exception as e:
+                    # 创建事件触发时文件常尚未写完 (复制/上传中), 延迟重试
+                    # 而不是永久漏检
+                    if attempt < 3:
+                        delay = 5 * (attempt + 1)
+                        print(
+                            f"[监控] 处理失败 (可能仍在写入): {path.name} - {e}, "
+                            f"{delay}s 后重试 ({attempt + 1}/3)"
+                        )
+                        timer = threading.Timer(
+                            delay, self_2.on_created, args=(event,), kwargs={"attempt": attempt + 1}
+                        )
+                        timer.daemon = True
+                        timer.start()
+                    else:
+                        print(f"[监控] 处理失败, 已放弃: {path.name} - {e}")
 
         print(f"[监控] 开始 Watchdog 监听: {self.watch_dir}")
         print(f"[监控] 会话 ID: {self.session.session_id}")

@@ -38,7 +38,8 @@ class PatternRegistry:
                 "phone", "mobile", "tel", "telephone", "cell", "mobilephone",
                 "手机", "电话", "手机号", "联系电话", "phone_number", "contact",
             ],
-            value_regex=r"^\+?[\d\s\-()]{7,20}$",
+            # 要求至少 4 位数字, 避免纯符号/空白串命中
+            value_regex=r"^(?=(?:\D*\d){4})\+?[\d\s\-()]{7,20}$",
             priority=10,
             description="电话号码",
         ),
@@ -63,7 +64,10 @@ class PatternRegistry:
                 "price", "amount", "salary", "cost", "fee", "revenue",
                 "价格", "金额", "工资", "费用", "收入", "currency", "money",
             ],
-            value_regex=r"^[\$¥€£]?\s*[\d,]+\.?\d*$",
+            # 货币需要显式证据: 货币符号或千分位分隔符.
+            # 裸数字 (25, 42) 不能作为货币证据, 否则所有纯整数列都会
+            # 以高置信度被误判为货币
+            value_regex=r"^[\$¥€£]\s*[\d,]+\.?\d*$|^\d{1,3}(,\d{3})+(\.\d+)?$",
             priority=8,
             description="货币/金额",
         ),
@@ -71,7 +75,9 @@ class PatternRegistry:
         SemanticPattern(
             name="uuid",
             semantic_type=SemanticType.UUID,
-            column_patterns=["uuid", "guid", "id", "identifier"],
+            # 不含裸 "id": 任何含 id 子串的列名 (如 video_001) 都会
+            # 借此命中 uuid 模式; 裸 id 由 id 模式负责
+            column_patterns=["uuid", "guid", "identifier"],
             value_regex=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             priority=9,
             description="通用唯一标识符",

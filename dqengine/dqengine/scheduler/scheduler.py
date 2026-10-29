@@ -54,6 +54,7 @@ class TaskScheduler:
             "report": self._run_report,
         }
         self._results: List[Dict[str, Any]] = []
+        self._apscheduler: Any = None
         # WATCH 任务的文件快照: task_id -> {file_path: mtime}
         self._watch_state: Dict[str, Dict[str, float]] = {}
         self.loader = DataLoader()
@@ -69,7 +70,12 @@ class TaskScheduler:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
-        tasks_data = data.get("tasks", data.get("schedule", []))
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"调度配置文件格式错误: 顶层应为映射 (收到 {type(data).__name__})"
+            )
+
+        tasks_data = data.get("tasks", data.get("schedule", [])) or []
         task_list: List[ScheduledTask] = []
         for t in tasks_data:
             task_list.append(
@@ -125,6 +131,8 @@ class TaskScheduler:
             from croniter import croniter
             return croniter(expr, after).get_next(datetime).isoformat()
         except ImportError:
+            print("[调度器] 警告: croniter 未安装, cron 任务退化为每 5 分钟执行 "
+                  "(pip install croniter 可按表达式调度)")
             from datetime import timedelta
             return (after + timedelta(minutes=5)).isoformat()
 
@@ -177,6 +185,7 @@ class TaskScheduler:
         from apscheduler.triggers.interval import IntervalTrigger
 
         scheduler = BackgroundScheduler()
+        self._apscheduler = scheduler
 
         for task in self.tasks.values():
             if not task.enabled:
@@ -255,6 +264,13 @@ class TaskScheduler:
     def stop(self) -> None:
         """停止调度器."""
         self._running = False
+        if self._apscheduler is not None:
+            try:
+                self._apscheduler.shutdown(wait=False)
+            except Exception as e:
+                print(f"[调度器] APScheduler 关闭异常: {e}")
+            finally:
+                self._apscheduler = None
 
     def _execute_task(self, task: ScheduledTask) -> None:
         """执行单个调度任务."""
@@ -269,9 +285,21 @@ class TaskScheduler:
             result["task_name"] = task.name
             result["executed_at"] = datetime.now().isoformat()
             self._results.append(result)
+            if len(self._results) > 1000:
+                del self._results[: len(self._results) - 1000]
             self.update_next_run(task)
         except Exception as e:
             print(f"[调度器] 任务失败 [{task.name}]: {e}")
+            self._results.append(
+                {
+                    "task_id": task.task_id,
+                    "task_name": task.name,
+                    "action": task.action,
+                    "success": False,
+                    "error": str(e),
+                    "executed_at": datetime.now().isoformat(),
+                }
+            )
 
     def _run_profile(self, task: ScheduledTask) -> Dict[str, Any]:
         df = self.loader.load(Path(task.target_path))
@@ -293,7 +321,18 @@ class TaskScheduler:
         df, _ = DuplicateCleaner().clean(df)
         df, _ = DateStandardizer().standardize(df)
         rows_after = len(df)
-        return {"action": "clean", "success": True, "rows_before": rows_before, "rows_after": rows_after}
+        # 清洗结果落盘: 否则 clean 调度动作除统计外没有任何持久效果
+        target = Path(task.target_path)
+        output = Path(task.config_path) if task.config_path else target.parent / f"cleaned_{target.name}"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(output, index=False, encoding="utf-8")
+        return {
+            "action": "clean",
+            "success": True,
+            "rows_before": rows_before,
+            "rows_after": rows_after,
+            "output": str(output),
+        }
 
     def _run_report(self, task: ScheduledTask) -> Dict[str, Any]:
         df = self.loader.load(Path(task.target_path))

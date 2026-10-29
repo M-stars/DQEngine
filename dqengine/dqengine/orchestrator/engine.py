@@ -83,10 +83,23 @@ class DAGEngine:
         with open(path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
+        if not isinstance(config, dict):
+            raise ValueError(
+                f"Pipeline 文件格式错误: 顶层应为 YAML 映射 (收到 {type(config).__name__})"
+            )
+
         pipeline_config = config.get("pipeline", config)
+        if not isinstance(pipeline_config, dict):
+            raise ValueError("Pipeline 文件格式错误: pipeline 键应为映射")
         nodes: List[DAGNode] = []
 
-        for step in pipeline_config.get("steps", []):
+        steps = pipeline_config.get("steps", [])
+        if not isinstance(steps, list):
+            raise ValueError("Pipeline 文件格式错误: steps 应为列表")
+        if not steps:
+            raise ValueError("Pipeline 未定义任何节点 (steps 为空)")
+
+        for step in steps:
             if isinstance(step, str):
                 # 简单模式: 步骤名即节点类型
                 node_type = DAGNodeType(step.strip())
@@ -124,7 +137,21 @@ class DAGEngine:
         # 拓扑排序
         sorted_nodes = self._topological_sort(pipeline.nodes)
 
+        node_status = {n.node_id: n.status for n in pipeline.nodes}
+
         for node in sorted_nodes:
+            # 依赖语义: 任一直接依赖未成功完成则本节点跳过,
+            # 避免下游基于未清洗/缺失的数据继续产出错误产物
+            failed_deps = [
+                dep for dep in node.depends_on
+                if node_status.get(dep) != DAGNodeStatus.COMPLETED
+            ]
+            if failed_deps:
+                node.status = DAGNodeStatus.SKIPPED
+                node.error = f"上游节点未完成: {', '.join(failed_deps)}"
+                node_status[node.node_id] = node.status
+                continue
+
             node.status = DAGNodeStatus.RUNNING
             node.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -140,6 +167,7 @@ class DAGEngine:
             except Exception as e:
                 node.status = DAGNodeStatus.FAILED
                 node.error = str(e)
+            node_status[node.node_id] = node.status
 
             node.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -158,13 +186,26 @@ class DAGEngine:
     def run_pipeline(self, pipeline_path: str, input_file: Optional[str] = None) -> DAGExecutionResult:
         """加载并执行 Pipeline 文件."""
         pipeline = self.load_pipeline(pipeline_path)
-        if input_file and not pipeline.nodes[0].config.get("input"):
+        if input_file and pipeline.nodes and not pipeline.nodes[0].config.get("input"):
             pipeline.nodes[0].config["input"] = input_file
         return self.execute(pipeline, input_file)
 
     def _topological_sort(self, nodes: List[DAGNode]) -> List[DAGNode]:
         """拓扑排序 (Kahn's algorithm)."""
         node_map = {n.node_id: n for n in nodes}
+
+        # 未知依赖先行报错: 否则入度永远无法归零, 会被误报为循环依赖
+        unknown = {
+            dep
+            for n in nodes
+            for dep in n.depends_on
+            if dep not in node_map
+        }
+        if unknown:
+            raise ValueError(
+                f"Pipeline 依赖了不存在的节点: {', '.join(sorted(unknown))}"
+            )
+
         in_degree = {n.node_id: len(n.depends_on) for n in nodes}
         adj: Dict[str, List[str]] = {n.node_id: [] for n in nodes}
 

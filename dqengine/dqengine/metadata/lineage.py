@@ -132,7 +132,10 @@ class LineageTracker:
         for k, v in data.get("lineages", {}).items():
             self._lineages[k] = DataLineage(**v)
         for e in data.get("executions", []):
-            self._executions.append(ExecutionRecord(**e))
+            record = ExecutionRecord(**e)
+            # 重复加载同一文件时按执行 ID 去重, 避免 executions 翻倍
+            if record.execution_id not in {x.execution_id for x in self._executions}:
+                self._executions.append(record)
 
     def generate_lineage_graph(self, dataset_id: str, output_path: str = "lineage_graph.html") -> str:
         """生成血缘关系可视化 HTML."""

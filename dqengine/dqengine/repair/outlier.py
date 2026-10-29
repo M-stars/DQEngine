@@ -1,4 +1,4 @@
-"""Outlier detection using the IQR method."""
+"""Outlier detection using the IQR / z-score methods."""
 
 from __future__ import annotations
 
@@ -8,10 +8,11 @@ from dqengine.models.schemas import OutlierRecord
 
 
 class OutlierDetector:
-    """Detect outliers in numeric columns using the IQR method.
+    """Detect outliers in numeric columns using the IQR or z-score method.
 
-    Outliers are values outside [Q1 - 1.5*IQR, Q3 + 1.5*IQR].
-    Extreme outliers are outside [Q1 - 3*IQR, Q3 + 3*IQR].
+    Outlier row positions are recorded positionally (row_index = position in
+    the DataFrame), so detection and removal are correct even when the index
+    has duplicate or non-integer labels.
 
     Usage:
         detector = OutlierDetector()
@@ -32,25 +33,31 @@ class OutlierDetector:
             method: Detection method, "iqr" or "zscore".
             threshold: IQR multiplier for the "iqr" method, z-score cutoff
                 for the "zscore" method. Extreme outliers sit at twice the
-                threshold.
+                threshold. Must be > 0.
 
         Returns:
             List of OutlierRecord for each detected outlier.
         """
         if method not in ("iqr", "zscore"):
             raise ValueError(f"未知的异常值检测方法: {method!r} (可选: iqr, zscore)")
+        if threshold <= 0:
+            raise ValueError(
+                f"threshold 必须为正数, 收到 {threshold!r} "
+                f"(非正阈值会使检测界反转, 可能清空整个数据集)"
+            )
 
         outliers: list[OutlierRecord] = []
         numeric_cols = df.select_dtypes(include=["number"]).columns
 
         for col in numeric_cols:
-            series = df[col].dropna()
-            if len(series) < 4:
+            values = df[col]
+            non_null = values.dropna()
+            if len(non_null) < 4:
                 continue
 
             if method == "iqr":
-                q1 = series.quantile(0.25)
-                q3 = series.quantile(0.75)
+                q1 = non_null.quantile(0.25)
+                q3 = non_null.quantile(0.75)
                 iqr = q3 - q1
 
                 if iqr == 0:
@@ -60,37 +67,30 @@ class OutlierDetector:
                 upper = q3 + threshold * iqr
                 extreme_lower = q1 - 2 * threshold * iqr
                 extreme_upper = q3 + 2 * threshold * iqr
-
-                for idx in series.index:
-                    val = series[idx]
-                    if val < extreme_lower or val > extreme_upper:
-                        severity = "extreme"
-                    elif val < lower or val > upper:
-                        severity = "mild"
-                    else:
-                        continue
-
-                    outliers.append(
-                        OutlierRecord(
-                            column=str(col),
-                            row_index=int(idx),
-                            value=float(val),
-                            lower_bound=round(float(lower), 4),
-                            upper_bound=round(float(upper), 4),
-                            severity=severity,
-                        )
-                    )
             else:  # zscore
-                mean = series.mean()
-                std = series.std()
+                mean = non_null.mean()
+                std = non_null.std()
                 if pd.isna(std) or std == 0:
                     continue
 
                 lower = mean - threshold * std
                 upper = mean + threshold * std
 
-                for idx in series.index:
-                    z = abs((series[idx] - mean) / std)
+            # 按位置遍历而非按标签索引: 重复/非整数索引标签下
+            # series[label] 会返回多值 Series 或截断, 导致崩溃或误判
+            for pos, val in enumerate(values):
+                if pd.isna(val):
+                    continue
+
+                if method == "iqr":
+                    if val < extreme_lower or val > extreme_upper:
+                        severity = "extreme"
+                    elif val < lower or val > upper:
+                        severity = "mild"
+                    else:
+                        continue
+                else:  # zscore
+                    z = abs((val - mean) / std)
                     if z > 2 * threshold:
                         severity = "extreme"
                     elif z > threshold:
@@ -98,16 +98,16 @@ class OutlierDetector:
                     else:
                         continue
 
-                    outliers.append(
-                        OutlierRecord(
-                            column=str(col),
-                            row_index=int(idx),
-                            value=float(series[idx]),
-                            lower_bound=round(float(lower), 4),
-                            upper_bound=round(float(upper), 4),
-                            severity=severity,
-                        )
+                outliers.append(
+                    OutlierRecord(
+                        column=str(col),
+                        row_index=pos,
+                        value=float(val),
+                        lower_bound=round(float(lower), 4),
+                        upper_bound=round(float(upper), 4),
+                        severity=severity,
                     )
+                )
 
         return outliers
 
@@ -118,13 +118,21 @@ class OutlierDetector:
 
         Args:
             df: Input DataFrame.
-            outliers: List of detected outliers.
+            outliers: List of detected outliers (row_index 为 df 中的行位置).
 
         Returns:
             DataFrame with outlier rows removed.
         """
-        indices_to_drop = {o.row_index for o in outliers}
-        return df.drop(index=indices_to_drop).copy()
+        positions = sorted({o.row_index for o in outliers})
+        if not positions or not len(df):
+            return df.copy()
+
+        n = len(df)
+        keep_mask = [True] * n
+        for pos in positions:
+            if 0 <= pos < n:
+                keep_mask[pos] = False
+        return df[pd.Series(keep_mask, index=df.index)].copy()
 
     def summary(self, outliers: list[OutlierRecord]) -> dict:
         """Summarize detected outliers by column."""

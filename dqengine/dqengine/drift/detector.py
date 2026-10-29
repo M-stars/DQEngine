@@ -36,6 +36,8 @@ class DriftDetector:
 
     # 阈值配置
     KS_THRESHOLD: Dict[str, float] = {"low": 0.1, "medium": 0.2, "high": 0.3}
+    # KS 检验的显著性门槛: p 值低于该值才认为存在分布漂移
+    KS_PVALUE_THRESHOLD: float = 0.05
     PSI_THRESHOLD: Dict[str, float] = {"low": 0.1, "medium": 0.2, "high": 0.3}
     NULL_CHANGE_THRESHOLD: Dict[str, float] = {"low": 0.05, "medium": 0.15, "high": 0.30}
     CATEGORY_CHANGE_THRESHOLD: Dict[str, float] = {"low": 0.05, "medium": 0.15, "high": 0.30}
@@ -65,7 +67,7 @@ class DriftDetector:
 
         all_drifts = schema_drift + distribution_drift + null_drift + category_drift
 
-        return DriftReport(
+        report = DriftReport(
             baseline_file=baseline_path,
             current_file=current_path,
             total_columns=max(len(baseline_df.columns), len(current_df.columns)),
@@ -76,6 +78,14 @@ class DriftDetector:
             null_drift=null_drift,
             category_drift=category_drift,
         )
+
+        # 履行签名承诺: 请求了输出路径则落盘 (此前为死参数)
+        if output_json:
+            self.save_summary_json(report, output_json)
+        if output_html:
+            self.generate_html_report(report, output_html)
+
+        return report
 
     def _detect_schema_drift(
         self, baseline_df: pd.DataFrame, current_df: pd.DataFrame
@@ -141,6 +151,12 @@ class DriftDetector:
             try:
                 ks_stat, ks_pvalue = stats.ks_2samp(b_data, c_data)
             except Exception:
+                continue
+
+            # p 值门控: KS 统计量对样本量高度敏感, 小样本下同分布数据
+            # 也能产生很大的统计量 (实测 n=15 时 100% 误报). 不显著
+            # (p >= 0.05) 一律不判漂移.
+            if ks_pvalue >= self.KS_PVALUE_THRESHOLD:
                 continue
 
             severity = self._ks_severity(ks_stat)

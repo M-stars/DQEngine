@@ -80,14 +80,20 @@ class DataLoader:
         Returns:
             DataFrame.
         """
-        for encoding in self.ENCODINGS:
+        # 用户显式指定 encoding 时不再走自动探测,
+        # 且必须从 kwargs 中取出, 否则与位置参数重复必抛 TypeError
+        user_encoding = kwargs.pop("encoding", None)
+        encodings = [user_encoding] if user_encoding else self.ENCODINGS
+        last_error: Exception = None
+        for encoding in encodings:
             try:
                 df = pd.read_csv(path, encoding=encoding, **kwargs)
                 logger.debug("CSV 加载成功: %s (编码: %s)", path.name, encoding)
                 return df
-            except (UnicodeDecodeError, UnicodeError):
+            except (UnicodeDecodeError, UnicodeError) as e:
+                last_error = e
                 continue
-        raise ValueError(f"无法解码 {path.name}, 尝试编码: {self.ENCODINGS}")
+        raise ValueError(f"无法解码 {path.name}, 尝试编码: {encodings}") from last_error
 
     def load_excel(self, path: Path, **kwargs) -> pd.DataFrame:
         """加载 Excel 文件.
@@ -113,7 +119,15 @@ class DataLoader:
             DataFrame.
         """
         logger.debug("JSON 加载: %s", path.name)
-        return pd.read_json(path, **kwargs)
+        try:
+            return pd.read_json(path, **kwargs)
+        except ValueError:
+            # 逐行 JSON (NDJSON/JSON Lines) 以 .json 后缀保存是常见形态,
+            # 标准 json 解析会报 "Trailing data", 回退按行解析
+            try:
+                return pd.read_json(path, lines=True, **kwargs)
+            except ValueError:
+                raise
 
     def load_parquet(self, path: Path, **kwargs) -> pd.DataFrame:
         """加载 Parquet 文件.
@@ -168,8 +182,10 @@ class DataLoader:
         logger.debug("SQLite 加载: %s -> 表: %s", path.name, table_name)
 
         conn = sqlite3.connect(str(path))
-        df = pd.read_sql(f"SELECT * FROM {table_name}", conn, **kwargs)
-        conn.close()
+        try:
+            df = pd.read_sql(f'SELECT * FROM "{table_name}"', conn, **kwargs)
+        finally:
+            conn.close()
         return df
 
     def detect_format(self, file_path: "str | Path") -> str:

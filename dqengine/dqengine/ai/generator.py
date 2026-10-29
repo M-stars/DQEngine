@@ -145,7 +145,12 @@ class HeuristicRuleGenerator(RuleGeneratorBase):
         # 整数型但存为 float 的特殊处理
         if expected_type == "float":
             sample = series.dropna().head(self.sample_size)
-            if len(sample) > 0 and (sample == sample.astype(int)).all():
+            # inf/NaN 无法转整型, astype(int) 会抛 IntCastingNaNError
+            if (
+                len(sample) > 0
+                and np.isfinite(sample.astype(float)).all()
+                and (sample == sample.astype(int)).all()
+            ):
                 expected_type = "int"
 
         return AIRule(

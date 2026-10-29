@@ -62,7 +62,10 @@ class DateStandardizer:
                         details[col] = (
                             f"standardized {changed}/{rows_before} values to {target_format}"
                         )
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, AttributeError):
+                # AttributeError: 混合时区偏移等输入使 to_datetime 返回
+                # object dtype, .dt 访问器不可用 —— 跳过该列而不是让
+                # 整个文件的清洗失败
                 continue
 
         result = RepairResult(
@@ -91,6 +94,18 @@ class DateStandardizer:
             )
             if not convertible:
                 continue
+
+            # object 列里混有数字时同样不能转: pd.to_datetime 会把裸数字
+            # 当作 epoch 纳秒 (Excel 序列日期/混型读取的 int/float 全部
+            # 变成 1970-01-01), 而无单位信息时任何数值解释都是猜测.
+            if df[col].dtype == "object":
+                non_null = df[col].dropna()
+                has_numeric = any(
+                    isinstance(v, (int, float)) and not isinstance(v, bool)
+                    for v in non_null.head(50)
+                )
+                if has_numeric:
+                    continue
 
             col_lower = str(col).lower()
             # Name-based heuristic

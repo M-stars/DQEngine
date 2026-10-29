@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
+from dqengine.utils.logger import get_logger
 from dqengine.models.schemas import (
     ExecutionTrace,
     Metric,
@@ -18,6 +19,9 @@ from dqengine.models.schemas import (
     ObservabilityReport,
     RuleExecutionStats,
 )
+
+
+logger = get_logger(__name__)
 
 
 class TelemetryManager:
@@ -156,6 +160,9 @@ class TelemetryManager:
             trace.end_time = datetime.now().isoformat()
             trace.duration_ms = round((time.time() - start) * 1000, 2)
             self.traces.append(trace)
+            # 长驻进程内存保护: 只保留最近 1000 条
+            if len(self.traces) > 1000:
+                del self.traces[: len(self.traces) - 1000]
             self._save_trace_to_db(trace)
 
     def add_span(self, parent_trace_id: str, span: ExecutionTrace) -> None:
@@ -244,8 +251,8 @@ class TelemetryManager:
                 ),
             )
             conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("遥测数据写入数据库失败: %s", e)
         finally:
             if conn:
                 conn.close()
@@ -273,8 +280,8 @@ class TelemetryManager:
                 ),
             )
             conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("遥测数据写入数据库失败: %s", e)
         finally:
             if conn:
                 conn.close()
@@ -289,7 +296,8 @@ class TelemetryManager:
                 "SELECT * FROM executions ORDER BY start_time DESC LIMIT ?", (limit,)
             ).fetchall()
             return [dict(r) for r in rows]
-        except Exception:
+        except Exception as e:
+            logger.warning("查询执行历史失败: %s", e)
             return []
         finally:
             if conn:
@@ -312,7 +320,8 @@ class TelemetryManager:
                 "success_rate": success / max(total, 1),
                 "avg_duration_ms": round(avg_duration, 2),
             }
-        except Exception:
+        except Exception as e:
+            logger.warning("查询规则统计失败: %s", e)
             return {}
         finally:
             if conn:

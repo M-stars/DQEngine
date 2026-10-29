@@ -98,6 +98,15 @@ class SemanticDetector:
 
         if best_match:
             pattern, confidence = best_match
+            # 值验证零命中时仅字段名子串的判定证据不足, 统一降权,
+            # 避免含 'id' 子串的编号列被高分贴上 UUID 等错误标签
+            value_hit = bool(
+                pattern.value_regex
+                and sample_values
+                and re.compile(pattern.value_regex).search(str(sample_values[0]))
+            )
+            if not value_hit:
+                confidence = round(confidence * 0.6, 4)
             return FieldSemantic(
                 column_name=column,
                 detected_type=pattern.semantic_type,
@@ -186,6 +195,7 @@ class SemanticDetector:
         all_patterns = self._registry.get_all()
         regex_patterns = [p for p in all_patterns if p.value_regex]
 
+        best: Optional[Tuple[SemanticPattern, float]] = None
         for pattern in regex_patterns:
             try:
                 compiled = re.compile(pattern.value_regex)
@@ -194,12 +204,18 @@ class SemanticDetector:
                     if val and compiled.search(str(val)):
                         matches += 1
                 ratio = matches / len(sample_values) if sample_values else 0
-                if ratio >= 0.8:
-                    return (pattern, round(ratio, 4))
+                # 取匹配率最高者 (同分取优先级高者), 而非首个达标即返回 ——
+                # 否则裸数字列会因 currency 模式先于 age 注册而被判为货币
+                if ratio >= 0.8 and (
+                    best is None
+                    or ratio > best[1]
+                    or (ratio == best[1] and pattern.priority > best[0].priority)
+                ):
+                    best = (pattern, round(ratio, 4))
             except re.error:
                 continue
 
-        return None
+        return best
 
     @staticmethod
     def _sample_values(series: pd.Series) -> List[str]:

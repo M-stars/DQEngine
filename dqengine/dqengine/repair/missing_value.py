@@ -77,10 +77,11 @@ class MissingValueCleaner:
 
             if strategy == "constant":
                 if pd.api.types.is_numeric_dtype(df_clean[col]):
+                    if constant_value is None:
+                        fill_details[col] = "skipped: constant 策略对数值列需要提供 constant_value"
+                        continue
                     try:
-                        fill_value = (
-                            float(constant_value) if constant_value is not None else None
-                        )
+                        fill_value = float(constant_value)
                     except (TypeError, ValueError):
                         fill_details[col] = (
                             f"skipped: constant {constant_value!r} not valid for numeric column"
@@ -90,13 +91,7 @@ class MissingValueCleaner:
                     fill_value = constant_value if constant_value is not None else "MISSING"
                 fill_details[col] = f"constant={fill_value}"
             elif strategy == "mode":
-                mode_vals = df_clean[col].mode()
-                if len(mode_vals) > 0:
-                    fill_value = mode_vals[0]
-                    fill_details[col] = f"mode={fill_value}"
-                else:
-                    fill_value = "MISSING"
-                    fill_details[col] = "placeholder='MISSING'"
+                fill_value, fill_details[col] = self._mode_fill(df_clean[col])
             elif pd.api.types.is_numeric_dtype(df_clean[col]):
                 if strategy == "median":
                     fill_value = df_clean[col].median()
@@ -106,13 +101,7 @@ class MissingValueCleaner:
                     fill_details[col] = f"mean={fill_value:.2f}"
             else:
                 # mean/median strategy on a non-numeric column falls back to mode
-                mode_vals = df_clean[col].mode()
-                if len(mode_vals) > 0:
-                    fill_value = mode_vals[0]
-                    fill_details[col] = f"mode={fill_value}"
-                else:
-                    fill_value = "MISSING"
-                    fill_details[col] = "placeholder='MISSING'"
+                fill_value, fill_details[col] = self._mode_fill(df_clean[col])
 
             if fill_value is None or pd.isna(fill_value):
                 # No valid fill value computable (e.g. all-null column).
@@ -140,3 +129,17 @@ class MissingValueCleaner:
         )
 
         return df_clean, result
+
+    @staticmethod
+    def _mode_fill(series: pd.Series) -> tuple:
+        """按众数生成填充值; 全空列的占位符仅用于文本类列.
+
+        数值/布尔列全空时没有任何可用众数, 填入字符串占位符会改变列
+        类型 (Int64/boolean 列直接抛 TypeError), 因此跳过并如实记录.
+        """
+        mode_vals = series.mode()
+        if len(mode_vals) > 0:
+            return mode_vals[0], f"mode={mode_vals[0]}"
+        if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
+            return None, "skipped: 全空数值/布尔列没有可用的众数或占位符"
+        return "MISSING", "placeholder='MISSING'"

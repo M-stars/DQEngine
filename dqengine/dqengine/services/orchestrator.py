@@ -54,6 +54,10 @@ class CleaningOrchestrator:
             config: AppConfig 配置, 为 None 时使用默认配置.
         """
         self.config = config or AppConfig()
+        if self.config.log_level:
+            # 配置声明的日志级别生效, 而不是被静默忽略
+            import logging
+            logging.getLogger("dqengine").setLevel(self.config.log_level.upper())
         self.loader = DataLoader()
         self.profiler = Profiler()
         self.scorer = QualityScorer()
@@ -167,14 +171,19 @@ class CleaningOrchestrator:
             df.to_csv(out_path, index=False, encoding="utf-8")
         logger.info("数据已保存: %s", out_path)
 
-        # Step 10: 生成报告
+        # Step 10: 生成报告 (尊重配置: 裸文件名进配置的输出目录,
+        # include_outliers=False 时不输出异常值明细)
         logger.info("Step 10: 生成报告")
+        report_file = Path(report_path)
+        if not report_file.parent.name and self.config.report.output_dir != "reports":
+            report_file = Path(self.config.report.output_dir) / report_file
+            report_file.parent.mkdir(parents=True, exist_ok=True)
         report_output = self.report_gen.generate(
             profile=profile_after,
             score=score_after,
             repairs=repairs,
-            outliers=outliers,
-            output_path=str(report_path),
+            outliers=outliers if self.config.report.include_outliers else [],
+            output_path=str(report_file),
         )
         logger.info("报告已生成: %s", report_output)
 

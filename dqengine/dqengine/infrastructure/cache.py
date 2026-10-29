@@ -42,6 +42,20 @@ class CacheManager:
             raise NotImplementedError("Redis 缓存尚未实现。请安装 redis 库。")
         return default
 
+    def _purge_expired(self) -> None:
+        """清理已过期条目 (须持锁调用).
+
+        只在读取时淘汰会让写多读少的 TTL 键永不回收.
+        """
+        now = time.time()
+        expired = [
+            k
+            for k, entry in self._store.items()
+            if entry["expires_at"] > 0 and now > entry["expires_at"]
+        ]
+        for k in expired:
+            del self._store[k]
+
     def set(self, key: str, value: Any, ttl: int = 0) -> None:
         """设置缓存值.
 
@@ -52,6 +66,7 @@ class CacheManager:
         """
         if self.provider == CacheProvider.MEMORY:
             with self._lock:
+                self._purge_expired()
                 self._store[key] = {
                     "value": value,
                     "expires_at": time.time() + ttl if ttl > 0 else 0,
@@ -92,5 +107,6 @@ class CacheManager:
     def size(self) -> int:
         """缓存条目数."""
         if self.provider == CacheProvider.MEMORY:
-            return len(self._store)
+            self._purge_expired()
+        return len(self._store)
         return 0

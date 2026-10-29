@@ -39,6 +39,9 @@ from dqengine.utils.console import (
     render_score_gauge,
 )
 
+# 全局 --config 选项的值, 供未显式传 --config 的子命令回退使用
+_global_config_path: Optional[str] = None
+
 app = typer.Typer(
     name="dq",
     help="DQEngine — AI-Driven Data Quality Platform v3.0",
@@ -90,9 +93,15 @@ def callback(
         dq plugins
         dq doctor
     """
+    global _global_config_path
     ctx.ensure_object(dict)
     ctx.obj["config"] = config
     ctx.obj["verbose"] = verbose
+    _global_config_path = config
+    if verbose:
+        import logging
+
+        logging.getLogger("dqengine").setLevel(logging.DEBUG)
 
 
 # ============================================================================
@@ -188,6 +197,7 @@ def profile(
     if output:
         import json
         out_path = Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(profile_result.model_dump_json(indent=2), encoding="utf-8")
         print_success(f"画像已保存至: {out_path}")
 
@@ -208,12 +218,18 @@ def auto(
         print_error(f"文件未找到: {file}")
         raise typer.Exit(code=1)
 
-    # 加载配置
+    # 加载配置 (子命令未传 --config 时回退到全局 --config)
     app_config = AppConfig()
-    if config:
+    effective_config = config or _global_config_path
+    if effective_config:
+        if not Path(effective_config).exists():
+            print_error(f"配置文件未找到: {effective_config}")
+            raise typer.Exit(code=1)
         from dqengine.services.config_manager import ConfigManager
         cm = ConfigManager()
-        app_config = cm.load(config)
+        app_config = cm.load(effective_config)
+    if no_outlier_removal:
+        app_config.cleaning.outlier.enabled = False
 
     console.print()
     console.print(Panel.fit(f"[bold]自动清洗:[/bold] {path.name}", border_style="cyan"))
@@ -397,6 +413,7 @@ def semantic(
 
     if output:
         out_path = Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         print_success(f"语义分析结果已保存: {out_path}")
 
@@ -424,12 +441,16 @@ def batch(
         print_error(f"目录不存在: {directory}")
         raise typer.Exit(code=1)
 
-    # 加载配置
+    # 加载配置 (子命令未传 --config 时回退到全局 --config)
     app_config = AppConfig()
-    if config:
+    effective_config = config or _global_config_path
+    if effective_config:
+        if not Path(effective_config).exists():
+            print_error(f"配置文件未找到: {effective_config}")
+            raise typer.Exit(code=1)
         from dqengine.services.config_manager import ConfigManager
         cm = ConfigManager()
-        app_config = cm.load(config)
+        app_config = cm.load(effective_config)
 
     console.print()
     console.print(
@@ -471,7 +492,8 @@ def batch(
                 file_rows.append([
                     Path(f.file_path).name,
                     "[red]失败[/red]",
-                    "-", "-", "-",
+                    "-",
+                    "-",
                     f.error or "未知错误",
                 ])
 
@@ -506,12 +528,16 @@ def pipeline(
         print_error(f"文件未找到: {file}")
         raise typer.Exit(code=1)
 
-    # 加载配置
+    # 加载配置 (子命令未传 --config 时回退到全局 --config)
     app_config = AppConfig()
-    if config:
+    effective_config = config or _global_config_path
+    if effective_config:
+        if not Path(effective_config).exists():
+            print_error(f"配置文件未找到: {effective_config}")
+            raise typer.Exit(code=1)
         from dqengine.services.config_manager import ConfigManager
         cm = ConfigManager()
-        app_config = cm.load(config)
+        app_config = cm.load(effective_config)
 
     console.print()
     console.print(Panel.fit(f"[bold]生成 Pipeline:[/bold] {path.name}", border_style="cyan"))
@@ -608,7 +634,7 @@ def doctor() -> None:
         "rich": "终端美化",
         "pandas": "数据处理",
         "pydantic": "数据验证",
-        "pyyaml": "YAML解析",
+        "yaml": "YAML解析 (pip 包名 pyyaml)",
         "jinja2": "模板引擎",
         "openpyxl": "Excel支持",
         "pyarrow": "Parquet支持",
@@ -761,27 +787,30 @@ def ai_generate_rules(
     if output:
         import yaml
 
-        yaml_rules: Dict[str, Dict[str, Any]] = {"rules": {}}
+        # 导出为 RuleValidator 可直接消费的格式: 顶层 columns 键 +
+        # 其支持的规则键 (min/max, regex, not_null, allowed_values).
+        # unique/type 等验证器不支持的规则无法表达, 跳过.
+        yaml_rules: Dict[str, Dict[str, Any]] = {"columns": {}}
         for col_name, rules in rule_set.columns.items():
             col_rule: Dict[str, Any] = {}
             for rule in rules:
                 if rule.rule_type == "range":
-                    col_rule["min"] = rule.params.get("min")
-                    col_rule["max"] = rule.params.get("max")
+                    if rule.params.get("min") is not None:
+                        col_rule["min"] = rule.params.get("min")
+                    if rule.params.get("max") is not None:
+                        col_rule["max"] = rule.params.get("max")
                 elif rule.rule_type == "regex":
                     col_rule["regex"] = rule.params.get("pattern")
                 elif rule.rule_type == "nullable":
-                    col_rule["nullable"] = rule.params.get("nullable")
-                elif rule.rule_type == "unique":
-                    col_rule["unique"] = rule.params.get("should_be_unique")
+                    if rule.params.get("nullable") is False:
+                        col_rule["not_null"] = True
                 elif rule.rule_type == "allowed_values":
                     col_rule["allowed_values"] = rule.params.get("values")
-                elif rule.rule_type == "type":
-                    col_rule["type"] = rule.params.get("expected_type")
             if col_rule:
-                yaml_rules["rules"][col_name] = col_rule
+                yaml_rules["columns"][col_name] = col_rule
 
         out_path = Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(yaml.dump(yaml_rules, allow_unicode=True, default_flow_style=False), encoding="utf-8")
         print_success(f"规则已保存至: {out_path}")
 
@@ -932,17 +961,16 @@ def monitor(
     print_info("按 Ctrl+C 停止监控")
 
     try:
-        monitor.start_polling(interval_seconds=interval)
+        monitor.start_polling(interval_seconds=max(1, interval))
     except KeyboardInterrupt:
         console.print()
         print_success(f"监控已停止. 共处理 {monitor.session.total_files_processed} 个文件")
 
-        if report:
-            monitor.generate_trends_html(report)
-            print_success(f"监控报告已保存: {report}")
+        report_file = monitor.generate_trends_html(report or "monitoring_report.html")
+        if report_file and Path(report_file).exists():
+            print_success(f"监控报告已保存: {report_file}")
         else:
-            monitor.generate_trends_html("monitoring_report.html")
-            print_success("监控报告已保存: monitoring_report.html")
+            print_warning("暂无趋势数据, 未生成监控报告")
 
 
 @app.command()
@@ -984,7 +1012,18 @@ def serve(
         from dqengine.api.server import create_app
 
         app = create_app()
-        uvicorn.run(app, host=host, port=port, reload=reload, log_level="info")
+        if reload:
+            # reload 模式下 uvicorn 要求 import 字符串 (app 对象会使进程退出)
+            uvicorn.run(
+                "dqengine.api.server:create_app",
+                factory=True,
+                host=host,
+                port=port,
+                reload=True,
+                log_level="info",
+            )
+        else:
+            uvicorn.run(app, host=host, port=port, log_level="info")
     except ImportError:
         print_error("请安装 API 依赖: pip install fastapi uvicorn python-multipart")
         raise typer.Exit(code=1)
@@ -1068,6 +1107,7 @@ def run_pipeline(
 
     if output:
         out_path = Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         print_success(f"结果已保存: {out_path}")
 

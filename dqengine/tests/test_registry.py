@@ -117,7 +117,7 @@ class TestPatternRegistryPatterns:
         ("uuid", SemanticType.UUID),
         ("ip_address", SemanticType.IP_ADDRESS),
         ("url", SemanticType.URL),
-        ("id", SemanticType.UUID),  # UUID优先级高于ID
+        ("id", SemanticType.ID),  # 裸 id 归 ID 模式; uuid 只认 uuid/guid/identifier
         ("country", SemanticType.COUNTRY),
         ("city", SemanticType.CITY),
         ("age", SemanticType.AGE),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -66,7 +67,8 @@ class AdvancedReportGenerator:
             formats = [ReportFormat.HTML, ReportFormat.JSON, ReportFormat.MARKDOWN]
 
         generated: List[Path] = []
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 文件名含微秒级随机后缀: 同一秒内的多次生成不互相覆盖
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
 
         for fmt in formats:
             if fmt == ReportFormat.HTML:

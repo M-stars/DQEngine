@@ -36,7 +36,13 @@ class LoggerManager:
         LoggerManager._initialized = True
 
         self._log_dir = Path("logs")
-        self._log_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self._log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            # 只读工作目录下所有命令都会在 import 阶段崩溃,
+            # 降级为仅控制台日志而不是让整个包不可用
+            print(f"[日志] 无法创建日志目录 {self._log_dir}: {e}, 文件日志已禁用")
+            self._log_dir = None
 
         self._setup_root_logger()
 
@@ -52,7 +58,10 @@ class LoggerManager:
         console_handler.setFormatter(console_format)
         root.addHandler(console_handler)
 
-        # 文件日志处理器 - DEBUG级别, 自动轮转
+        # 文件日志处理器 - DEBUG级别, 自动轮转 (日志目录不可用时跳过)
+        if self._log_dir is None:
+            return
+
         file_handler = RotatingFileHandler(
             self._log_dir / "dqengine.log",
             maxBytes=10 * 1024 * 1024,  # 10MB

@@ -47,7 +47,10 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        # 通配 Origin 下开启凭据等于允许任意网站携凭据跨域调用
+        # (Starlette 会显式回显请求 Origin 并附带 Allow-Credentials),
+        # 本服务无 Cookie 会话, 必须关闭
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -105,7 +108,10 @@ def create_app() -> FastAPI:
     async def validate_endpoint(
         file: UploadFile = File(...),
         rules_file: Optional[UploadFile] = File(None),
-        rules_path: Optional[str] = Query(None, description="服务器端 YAML 规则路径"),
+        rules_path: Optional[str] = Query(
+            None,
+            description="服务器端 YAML 规则路径 (仅允许规则目录内的文件, 默认 ./configs)",
+        ),
     ) -> JSONResponse:
         """上传数据文件并执行规则验证."""
         df = await _read_uploaded_file(file)
@@ -125,7 +131,22 @@ def create_app() -> FastAPI:
                 )
             rules = validator._parse_rules(parsed)
         elif rules_path:
-            rules = rules_path
+            # 限制在规则目录内, 防止未认证客户端用任意路径探测/读取服务器文件
+            rules_dir = Path("configs").resolve()
+            candidate = Path(rules_path)
+            resolved = candidate if candidate.is_absolute() else (rules_dir / candidate)
+            try:
+                resolved = resolved.resolve()
+                resolved.relative_to(rules_dir)
+            except ValueError:
+                return JSONResponse(
+                    content=APIResponse(
+                        success=False,
+                        message=f"rules_path 必须位于规则目录内: {rules_dir}",
+                    ).model_dump(),
+                    status_code=400,
+                )
+            rules = str(resolved)
         else:
             return JSONResponse(
                 content=APIResponse(
@@ -200,14 +221,21 @@ def create_app() -> FastAPI:
         baseline_df = await _read_uploaded_file(baseline)
         current_df = await _read_uploaded_file(current)
 
-        # 保存临时文件用于漂移检测
-        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as bf, \
-             tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as cf:
-            baseline_df.to_csv(bf.name, index=False)
-            current_df.to_csv(cf.name, index=False)
-            report = drift_detector.detect(bf.name, cf.name)
-            Path(bf.name).unlink(missing_ok=True)
-            Path(cf.name).unlink(missing_ok=True)
+        # 保存临时文件用于漂移检测; detect 抛异常时也必须清理,
+        # 否则每次失败请求泄漏 2 个临时文件 (Windows 上还会锁目录)
+        bf_name = cf_name = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as bf, \
+                 tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as cf:
+                bf_name, cf_name = bf.name, cf.name
+                baseline_df.to_csv(bf.name, index=False)
+                current_df.to_csv(cf.name, index=False)
+                report = drift_detector.detect(bf.name, cf.name)
+        finally:
+            if bf_name:
+                Path(bf_name).unlink(missing_ok=True)
+            if cf_name:
+                Path(cf_name).unlink(missing_ok=True)
 
         return JSONResponse(content=report.model_dump())
 

@@ -65,21 +65,23 @@ class ConfigManager:
         """
         config_dict = self.DEFAULT_CONFIG.model_dump()
 
-        # 深度合并清洗配置
+        # 深度合并清洗配置 (子键为 null 时按空字典处理, 否则 update(None) 崩溃)
         if "cleaning" in raw:
-            clean_raw = raw["cleaning"]
-            if "missing" in clean_raw:
+            clean_raw = raw["cleaning"] or {}
+            if not isinstance(clean_raw, dict):
+                raise ValueError(f"cleaning 配置格式错误: {type(clean_raw).__name__}, 应为映射")
+            if clean_raw.get("missing"):
                 config_dict["cleaning"]["missing"].update(clean_raw["missing"])
-            if "duplicate" in clean_raw:
+            if clean_raw.get("duplicate"):
                 config_dict["cleaning"]["duplicate"].update(clean_raw["duplicate"])
-            if "outlier" in clean_raw:
+            if clean_raw.get("outlier"):
                 config_dict["cleaning"]["outlier"].update(clean_raw["outlier"])
-            if "date" in clean_raw:
+            if clean_raw.get("date"):
                 config_dict["cleaning"]["date"].update(clean_raw["date"])
 
         # 深度合并报告配置
         if "report" in raw:
-            report_raw = raw["report"]
+            report_raw = raw["report"] or {}
             if "formats" in report_raw:
                 config_dict["report"]["formats"] = report_raw["formats"]
             if "output_dir" in report_raw:

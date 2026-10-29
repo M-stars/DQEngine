@@ -126,6 +126,8 @@ class StorageManager:
             conn.close()
             return rows
         else:
+            if params:
+                return self.connection.execute(query, params).fetchall()
             return self.connection.execute(query).fetchall()
 
     def create_index(self, table_name: str, column: str) -> None:

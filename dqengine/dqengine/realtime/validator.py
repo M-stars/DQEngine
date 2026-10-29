@@ -10,8 +10,12 @@ from typing import Any, Dict, Iterator, List, Optional
 
 import pandas as pd
 
+from dqengine.utils.logger import get_logger
 from dqengine.models.schemas import StreamEvent, StreamValidationResult
 from dqengine.rules.validator import RuleValidator
+
+
+logger = get_logger(__name__)
 
 
 class StreamValidator:
@@ -92,7 +96,21 @@ class StreamValidator:
             if max_events > 0 and count >= max_events:
                 break
 
-            event_id = event_data.get("id", str(uuid.uuid4())[:8])
+            # 非对象事件 (JSON 数组混入标量等) 直接记为失败事件而不是
+            # 让 AttributeError 击穿整个流
+            if not isinstance(event_data, dict):
+                yield StreamValidationResult(
+                    event_id=f"invalid_{count}",
+                    passed=False,
+                    violations=[],
+                    processing_time_ms=0.0,
+                )
+                count += 1
+                continue
+
+            # 数字 id 等非字符串形态统一转 str, 否则 pydantic 校验会在
+            # 流中途抛 ValidationError, 丢失后续所有事件
+            event_id = str(event_data.get("id", str(uuid.uuid4())[:8]))
             data = event_data.get("data", event_data)
 
             start_time = time.time()
@@ -106,7 +124,10 @@ class StreamValidator:
                     violations = result.violations
                     passed = result.passed
                 except Exception as e:
+                    # 异常吞成 passed=False 却不给任何线索会让运维去查数据,
+                    # 实际问题多半在规则文件; 至少把原因打出来
                     passed = False
+                    logger.warning("事件验证异常 (event_id=%s): %s", event_id, e)
 
             elapsed = (time.time() - start_time) * 1000
 

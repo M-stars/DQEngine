@@ -49,6 +49,15 @@ class PluginRegistry:
 
         discovered: List[PluginInfo] = []
 
+        # 热插拔语义: 该目录下已不存在的插件文件, 其陈旧注册条目先移除
+        dir_prefix = str(dir_path.resolve())
+        for name in list(self._plugins.keys()):
+            old_path = self._plugins[name].file_path
+            if old_path and str(Path(old_path).resolve()).startswith(dir_prefix)                     and not Path(old_path).exists():
+                del self._plugins[name]
+                self._instances.pop(name, None)
+                logger.info("插件已移除 (文件不存在): %s", name)
+
         for py_file in sorted(dir_path.glob("*.py")):
             if py_file.name.startswith("_"):
                 continue
@@ -56,6 +65,13 @@ class PluginRegistry:
             try:
                 plugin_info = self._load_plugin_from_file(py_file)
                 if plugin_info:
+                    if plugin_info.name in self._plugins:
+                        logger.warning(
+                            "插件同名覆盖: %s (%s 替换 %s)",
+                            plugin_info.name,
+                            py_file.name,
+                            self._plugins[plugin_info.name].file_path,
+                        )
                     self._plugins[plugin_info.name] = plugin_info
                     discovered.append(plugin_info)
                     logger.info("插件已加载: %s (类型: %s)", plugin_info.name, plugin_info.plugin_type.value)
@@ -82,23 +98,36 @@ class PluginRegistry:
 
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
-        spec.loader.exec_module(module)
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            # exec 失败的半初始化模块必须移出 sys.modules,
+            # 否则残留的坏模块会污染后续同名加载
+            sys.modules.pop(module_name, None)
+            raise
 
-        # 查找插件信息
+        # 查找插件信息: 模块级 PLUGIN_INFO, 或模块内**自定义**该属性的类
+        # (继承自基类的 PLUGIN_INFO 不算 —— 否则任何只 import 了基类的
+        #  文件都会注册成幽灵插件, 甚至改写共享的基类属性)
         plugin_info = getattr(module, "PLUGIN_INFO", None)
-        if plugin_info is None or not isinstance(plugin_info, PluginInfo):
-            # 尝试从类中推断
+        if not isinstance(plugin_info, PluginInfo):
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if isinstance(attr, type) and hasattr(attr, "PLUGIN_INFO"):
-                    plugin_info = getattr(attr, "PLUGIN_INFO")
+                if (
+                    isinstance(attr, type)
+                    and attr.__module__ == module_name
+                    and attr.__dict__.get("PLUGIN_INFO") is not None
+                ):
+                    plugin_info = attr.PLUGIN_INFO
                     break
             else:
                 logger.warning("插件 %s 未定义 PLUGIN_INFO", file_path.name)
+                sys.modules.pop(module_name, None)
                 return None
 
+        # 拷贝后写入 file_path, 不改动调用方/基类共享的原始对象
+        plugin_info = plugin_info.model_copy(update={"file_path": str(file_path)})
         # 存储模块引用以便后续实例化
-        plugin_info.file_path = str(file_path)
         self._instances[plugin_info.name] = module
 
         return plugin_info
