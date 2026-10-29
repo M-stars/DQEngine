@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -184,44 +185,48 @@ class RuleValidator:
                 )
             ]
 
-        # 按位置遍历: 重复/非整数索引标签下 series[label] 会返回多值
-        # Series 或抛 int() 转换错误
-        for pos, (idx, val) in enumerate(series.items()):
-            if pd.isna(val):
-                original = df[rule.column].iloc[pos]
-                if not pd.isna(original):
-                    # 原值存在但无法转为数值: 非数值垃圾必须报违规,
-                    # 否则 "abc" 会静默通过 min/max 校验
-                    violations.append(
-                        RuleViolation(
-                            column=rule.column,
-                            rule_type="range",
-                            row_index=pos,
-                            value=str(original),
-                            message=f"Value '{original}' is not numeric",
-                        )
-                    )
-                continue
-            if min_val is not None and val < min_val:
-                violations.append(
-                    RuleViolation(
-                        column=rule.column,
-                        rule_type="range",
-                        row_index=pos,
-                        value=float(val),
-                        message=f"Value {val} < min({min_val})",
-                    )
+        raw = df[rule.column]
+
+        # 向量化: 布尔掩码一次全列扫描, 只为违规行构造对象.
+        # NaN 在比较中自动为 False, 与逐行版本的 continue 等价.
+        nonnum_mask = (series.isna() & raw.notna()).to_numpy()
+        below = (series < min_val).to_numpy() if min_val is not None else np.zeros(len(series), dtype=bool)
+        above = (series > max_val).to_numpy() if max_val is not None else np.zeros(len(series), dtype=bool)
+        above &= ~below  # elif 语义: min 优先于 max
+
+        for pos in np.flatnonzero(nonnum_mask):
+            original = raw.iloc[pos]
+            violations.append(
+                RuleViolation(
+                    column=rule.column,
+                    rule_type="range",
+                    row_index=int(pos),
+                    value=str(original),
+                    message=f"Value '{original}' is not numeric",
                 )
-            elif max_val is not None and val > max_val:
-                violations.append(
-                    RuleViolation(
-                        column=rule.column,
-                        rule_type="range",
-                        row_index=pos,
-                        value=float(val),
-                        message=f"Value {val} > max({max_val})",
-                    )
+            )
+        for pos in np.flatnonzero(below):
+            val = series.iloc[pos]
+            violations.append(
+                RuleViolation(
+                    column=rule.column,
+                    rule_type="range",
+                    row_index=int(pos),
+                    value=float(val),
+                    message=f"Value {val} < min({min_val})",
                 )
+            )
+        for pos in np.flatnonzero(above):
+            val = series.iloc[pos]
+            violations.append(
+                RuleViolation(
+                    column=rule.column,
+                    rule_type="range",
+                    row_index=int(pos),
+                    value=float(val),
+                    message=f"Value {val} > max({max_val})",
+                )
+            )
         return violations
 
     def _check_regex(
@@ -256,19 +261,23 @@ class RuleValidator:
                 )
             ]
 
-        for pos, (idx, val) in enumerate(df[rule.column].items()):
-            if pd.isna(val):
-                continue
-            if not compiled.search(str(val)):
-                violations.append(
-                    RuleViolation(
-                        column=rule.column,
-                        rule_type="regex",
-                        row_index=pos,
-                        value=str(val),
-                        message=f"'{val}' does not match pattern '{rule.params.get('pattern')}'",
-                    )
+        series = df[rule.column].astype(str)
+        # str.contains(compile(...)) 与逐行 re.search 语义一致;
+        # na=False 让 NaN (NaN 不匹配) 与逐行版本的 continue 等价
+        miss_mask = (~series.str.contains(compiled, na=False, regex=True)).to_numpy() & (
+            df[rule.column].notna().to_numpy()
+        )
+        for pos in np.flatnonzero(miss_mask):
+            val = df[rule.column].iloc[pos]
+            violations.append(
+                RuleViolation(
+                    column=rule.column,
+                    rule_type="regex",
+                    row_index=int(pos),
+                    value=str(val),
+                    message=f"'{val}' does not match pattern '{rule.params.get('pattern')}'",
                 )
+            )
         return violations
 
     def _check_not_null(
@@ -276,17 +285,19 @@ class RuleValidator:
     ) -> list[RuleViolation]:
         """Validate non-null constraint."""
         violations = []
-        for pos, (idx, val) in enumerate(df[rule.column].items()):
-            if pd.isna(val):
-                violations.append(
-                    RuleViolation(
-                        column=rule.column,
-                        rule_type="not_null",
-                        row_index=pos,
-                        value=None,
-                        message=f"Null value found at row {idx}",
-                    )
+        series = df[rule.column]
+        null_mask = series.isna().to_numpy()
+        labels = series.index.to_numpy()
+        for pos in np.flatnonzero(null_mask):
+            violations.append(
+                RuleViolation(
+                    column=rule.column,
+                    rule_type="not_null",
+                    row_index=int(pos),
+                    value=None,
+                    message=f"Null value found at row {labels[pos]}",
                 )
+            )
         return violations
 
     def _check_allowed_values(
@@ -295,18 +306,18 @@ class RuleValidator:
         """Validate against a set of allowed values."""
         violations = []
         allowed: set[Any] = set(rule.params.get("values", []))
-
-        for pos, (idx, val) in enumerate(df[rule.column].items()):
-            if pd.isna(val):
-                continue
-            if val not in allowed:
-                violations.append(
-                    RuleViolation(
-                        column=rule.column,
-                        rule_type="allowed_values",
-                        row_index=pos,
-                        value=str(val),
-                        message=f"'{val}' not in allowed values: {allowed}",
-                    )
+        series = df[rule.column]
+        # isin 与逐行 set 成员判断等价 (NaN 被 notna 排除, 与 continue 等价)
+        deny_mask = (series.notna() & ~series.isin(list(allowed))).to_numpy()
+        for pos in np.flatnonzero(deny_mask):
+            val = series.iloc[pos]
+            violations.append(
+                RuleViolation(
+                    column=rule.column,
+                    rule_type="allowed_values",
+                    row_index=int(pos),
+                    value=str(val),
+                    message=f"'{val}' not in allowed values: {allowed}",
                 )
+            )
         return violations
