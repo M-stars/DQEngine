@@ -43,6 +43,7 @@ class TelemetryManager:
     """
 
     def __init__(self, db_path: str = "execution_history.db") -> None:
+        self._started_at = __import__('time').time()
         self.metrics: Dict[str, Metric] = {}
         self.traces: List[ExecutionTrace] = []
         self.rule_stats: Dict[str, RuleExecutionStats] = {}
@@ -226,9 +227,35 @@ class TelemetryManager:
         path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
         return str(path)
 
+    def _rss_bytes(self) -> int:
+        """当前进程常驻内存 (无 psutil 时用 resource/procfs, 再退化返回 0)."""
+        try:
+            import resource
+            return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+        except Exception:
+            pass
+        try:
+            with open("/proc/self/status", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        return int(line.split()[1]) * 1024
+        except Exception:
+            pass
+        return 0
+
     def export_prometheus(self) -> str:
-        """导出 Prometheus 格式指标 (接口预留)."""
+        """导出 Prometheus 格式指标 (含进程级内置指标)."""
+        import os
+        import time as _time
+
+        process = __import__("psutil") if False else None
         lines: List[str] = []
+        # 内置运行时指标: 无需调用方打点即有数据
+        start = getattr(self, "_started_at", None)
+        if start:
+            lines.append(f"dqengine_uptime_seconds {max(_time.time() - start, 0):.1f}")
+        lines.append(f"dqengine_traces_total {len(self.traces)}")
+        lines.append(f"dqengine_process_resident_memory_bytes {self._rss_bytes()}")
         for name, metric in self.metrics.items():
             labels_str = ",".join(f'{k}="{v}"' for k, v in metric.labels.items())
             label_part = f"{{{labels_str}}}" if labels_str else ""

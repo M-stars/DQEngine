@@ -11,11 +11,14 @@ from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Respon
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
+import os
+
 from dqengine import __version__
 from dqengine.core.loader import DataLoader
 from dqengine.core.profiler import Profiler
 from dqengine.core.scorer import QualityScorer
 from dqengine.drift.detector import DriftDetector
+from dqengine.observability.telemetry import TelemetryManager
 from dqengine.models.schemas import (
     APIResponse,
     CleanRequest,
@@ -30,7 +33,10 @@ from dqengine.repair.missing_value import MissingValueCleaner
 from dqengine.repair.outlier import OutlierDetector
 from dqengine.report.advanced_generator import AdvancedReportGenerator
 from dqengine.rules.validator import RuleValidator
+from dqengine.utils.logger import get_logger
 from dqengine.semantic.detector import SemanticDetector
+
+logger = get_logger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -61,6 +67,34 @@ def create_app() -> FastAPI:
     validator = RuleValidator()
     detector = SemanticDetector()
     drift_detector = DriftDetector()
+    telemetry = TelemetryManager(db_path="dqengine_telemetry.db")
+
+    # ---- 可选 API Key 鉴权 ----
+    # 设置环境变量 DQENGINE_API_KEY 后, 除健康检查/文档/指标外的所有
+    # 端点都要求请求头 X-API-Key; 未设置时保持开放 (本地/内网开发模式),
+    # 启动日志会明确提示当前模式
+    api_key = os.environ.get("DQENGINE_API_KEY")
+
+    @app.middleware("http")
+    async def api_key_auth(request: Request, call_next):
+        open_paths = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/metrics"}
+        if api_key and request.url.path not in open_paths:
+            if request.headers.get("X-API-Key") != api_key:
+                return JSONResponse(
+                    content={"success": False, "message": "无效的 API Key"},
+                    status_code=401,
+                )
+        return await call_next(request)
+
+    logger.warning(
+        "API 鉴权模式: %s (通过环境变量 DQENGINE_API_KEY 配置)",
+        "已启用" if api_key else "未启用 —— 请勿将无鉴权实例暴露到公网",
+    )
+
+    @app.get("/metrics", tags=["系统"])
+    async def metrics() -> Response:
+        """Prometheus 指标端点."""
+        return Response(content=telemetry.export_prometheus(), media_type="text/plain; version=0.0.4")
 
     # ---- 健康检查 ----
 
@@ -81,6 +115,7 @@ def create_app() -> FastAPI:
                 "POST /semantic",
                 "POST /drift",
                 "GET /health",
+                "GET /metrics",
             ],
         }
 
