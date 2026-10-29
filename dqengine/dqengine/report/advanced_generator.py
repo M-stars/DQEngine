@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -463,7 +464,7 @@ class AdvancedReportGenerator:
         for dim in score.dimensions:
             dim_bars += f"""
             <div class="dimension-bar">
-                <span class="dimension-name">{dim.name}</span>
+                <span class="dimension-name">{escape(str(dim.name))}</span>
                 <div style="flex:1; background:#ecf0f1; border-radius:11px;">
                     <div class="dimension-fill" style="width:{dim.score}%; background:{score_color};"></div>
                 </div>
@@ -475,7 +476,7 @@ class AdvancedReportGenerator:
         for col, counts in outlier_summary.items():
             outlier_rows += f"""
             <tr>
-                <td><strong>{col}</strong></td>
+                <td><strong>{escape(str(col))}</strong></td>
                 <td><span class="badge badge-mild">{counts['mild']}</span></td>
                 <td><span class="badge badge-extreme">{counts['extreme']}</span></td>
             </tr>"""
@@ -485,7 +486,7 @@ class AdvancedReportGenerator:
         for r in repairs:
             repair_rows += f"""
             <tr>
-                <td><strong>{r.operation}</strong></td>
+                <td><strong>{escape(str(r.operation))}</strong></td>
                 <td>{r.rows_before}</td>
                 <td>{r.rows_after}</td>
                 <td>{r.changes_made}</td>
@@ -500,8 +501,8 @@ class AdvancedReportGenerator:
             max_str = f"{col.max_val:.2f}" if col.max_val is not None else "-"
             col_rows += f"""
             <tr>
-                <td><strong>{col.column_name}</strong></td>
-                <td>{col.dtype}</td>
+                <td><strong>{escape(col.column_name)}</strong></td>
+                <td>{escape(col.dtype)}</td>
                 <td>{col.non_null_count}/{col.total_count}</td>
                 <td>{(col.null_rate * 100):.1f}%</td>
                 <td>{col.unique_count}</td>
@@ -624,7 +625,7 @@ class AdvancedReportGenerator:
 <body>
     <header>
         <h1>DQEngine Data Quality Report</h1>
-        <div class="subtitle">Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Source: {profile.file_path}</div>
+        <div class="subtitle">Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Source: {escape(profile.file_path)}</div>
     </header>
 
     <div class="container">
