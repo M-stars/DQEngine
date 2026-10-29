@@ -290,13 +290,14 @@ def validate(
         print_error(f"规则文件未找到: {rules}")
         raise typer.Exit(code=1)
 
-    console.print()
-    console.print(
-        Panel.fit(
-            f"[bold]规则验证:[/bold] {path.name}  [dim]检测规则[/dim]  [bold]{rules_path.name}[/bold]",
-            border_style="cyan",
+    if not json_output:
+        console.print()
+        console.print(
+            Panel.fit(
+                f"[bold]规则验证:[/bold] {path.name}  [dim]检测规则[/dim]  [bold]{rules_path.name}[/bold]",
+                border_style="cyan",
+            )
         )
-    )
 
     from dqengine.core.loader import DataLoader
     from dqengine.rules.validator import RuleValidator
