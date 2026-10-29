@@ -163,10 +163,17 @@ class TaskScheduler:
                 next_run=t.get("next_run"),
                 last_run=t.get("last_run"),
             )
-            if task.task_id not in self.tasks:
+            existing = self.tasks.get(task.task_id)
+            if existing is None:
                 self.tasks[task.task_id] = task
                 self.config.tasks.append(task)
                 restored += 1
+            else:
+                # 任务定义以代码/YAML 为准, 但调度状态 (next_run) 以
+                # 持久化状态为准——否则重启后 CRON 仍会被立即执行一次
+                existing.next_run = task.next_run
+                existing.last_run = task.last_run
+                existing.enabled = task.enabled
         logger.info("已从 %s 恢复 %d 个调度任务", self.state_file, restored)
         return restored
 

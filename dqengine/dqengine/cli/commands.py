@@ -17,6 +17,7 @@ from dqengine.models.schemas import (
     PluginType,
     AppConfig,
 )
+from dqengine.utils.logger import get_logger
 from dqengine.utils.console import (
     console,
     create_table,
@@ -29,6 +30,8 @@ from dqengine.utils.console import (
 
 # 全局 --config 选项的值, 供未显式传 --config 的子命令回退使用
 _global_config_path: Optional[str] = None
+
+logger = get_logger(__name__)
 
 app = typer.Typer(
     name="dq",
@@ -309,13 +312,7 @@ def validate(
 
     result = validator.validate(df, rules)
 
-    if json_output:
-        # CI 门禁场景: 纯 JSON 到 stdout, 不混入表格渲染
-        print(result.model_dump_json(indent=2))
-        if not result.passed:
-            raise typer.Exit(code=1)
-        return
-
+    # 违规行隔离 (json 模式下同样生效, 消息走日志不渲染表格)
     if quarantine and result.violations:
         # 违规行隔离: 按行位置去重后导出, 附加违规摘要列
         row_msgs: dict = {}
@@ -333,9 +330,20 @@ def validate(
                 " | ".join(row_msgs[i]) for i in sorted(row_msgs)
             ]
             q_df.to_csv(q_path, index=False, encoding="utf-8")
-            print_success(
+            message = (
                 f"已隔离 {len(q_df)} 行违规数据 (另 {column_level} 条列级违规) -> {q_path}"
             )
+            if json_output:
+                logger.info(message)
+            else:
+                print_success(message)
+
+    if json_output:
+        # CI 门禁场景: 纯 JSON 到 stdout, 不混入表格渲染
+        print(result.model_dump_json(indent=2))
+        if not result.passed:
+            raise typer.Exit(code=1)
+        return
 
     status_style = "green" if result.passed else "red"
     status_text = "通过" if result.passed else "未通过"
