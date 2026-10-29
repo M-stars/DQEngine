@@ -19,15 +19,27 @@ class OutlierDetector:
         df_clean = detector.remove_outliers(df, outliers)
     """
 
-    def detect(self, df: pd.DataFrame) -> list[OutlierRecord]:
+    def detect(
+        self,
+        df: pd.DataFrame,
+        method: str = "iqr",
+        threshold: float = 1.5,
+    ) -> list[OutlierRecord]:
         """Detect outliers in all numeric columns.
 
         Args:
             df: Input DataFrame.
+            method: Detection method, "iqr" or "zscore".
+            threshold: IQR multiplier for the "iqr" method, z-score cutoff
+                for the "zscore" method. Extreme outliers sit at twice the
+                threshold.
 
         Returns:
             List of OutlierRecord for each detected outlier.
         """
+        if method not in ("iqr", "zscore"):
+            raise ValueError(f"未知的异常值检测方法: {method!r} (可选: iqr, zscore)")
+
         outliers: list[OutlierRecord] = []
         numeric_cols = df.select_dtypes(include=["number"]).columns
 
@@ -36,37 +48,66 @@ class OutlierDetector:
             if len(series) < 4:
                 continue
 
-            q1 = series.quantile(0.25)
-            q3 = series.quantile(0.75)
-            iqr = q3 - q1
+            if method == "iqr":
+                q1 = series.quantile(0.25)
+                q3 = series.quantile(0.75)
+                iqr = q3 - q1
 
-            if iqr == 0:
-                continue
-
-            lower = q1 - 1.5 * iqr
-            upper = q3 + 1.5 * iqr
-            extreme_lower = q1 - 3 * iqr
-            extreme_upper = q3 + 3 * iqr
-
-            for idx in series.index:
-                val = series[idx]
-                if val < extreme_lower or val > extreme_upper:
-                    severity = "extreme"
-                elif val < lower or val > upper:
-                    severity = "mild"
-                else:
+                if iqr == 0:
                     continue
 
-                outliers.append(
-                    OutlierRecord(
-                        column=str(col),
-                        row_index=int(idx),
-                        value=float(val),
-                        lower_bound=round(float(lower), 4),
-                        upper_bound=round(float(upper), 4),
-                        severity=severity,
+                lower = q1 - threshold * iqr
+                upper = q3 + threshold * iqr
+                extreme_lower = q1 - 2 * threshold * iqr
+                extreme_upper = q3 + 2 * threshold * iqr
+
+                for idx in series.index:
+                    val = series[idx]
+                    if val < extreme_lower or val > extreme_upper:
+                        severity = "extreme"
+                    elif val < lower or val > upper:
+                        severity = "mild"
+                    else:
+                        continue
+
+                    outliers.append(
+                        OutlierRecord(
+                            column=str(col),
+                            row_index=int(idx),
+                            value=float(val),
+                            lower_bound=round(float(lower), 4),
+                            upper_bound=round(float(upper), 4),
+                            severity=severity,
+                        )
                     )
-                )
+            else:  # zscore
+                mean = series.mean()
+                std = series.std()
+                if pd.isna(std) or std == 0:
+                    continue
+
+                lower = mean - threshold * std
+                upper = mean + threshold * std
+
+                for idx in series.index:
+                    z = abs((series[idx] - mean) / std)
+                    if z > 2 * threshold:
+                        severity = "extreme"
+                    elif z > threshold:
+                        severity = "mild"
+                    else:
+                        continue
+
+                    outliers.append(
+                        OutlierRecord(
+                            column=str(col),
+                            row_index=int(idx),
+                            value=float(series[idx]),
+                            lower_bound=round(float(lower), 4),
+                            upper_bound=round(float(upper), 4),
+                            severity=severity,
+                        )
+                    )
 
         return outliers
 

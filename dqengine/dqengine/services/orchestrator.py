@@ -108,7 +108,11 @@ class CleaningOrchestrator:
         # Step 4: 缺失值填充
         if cleaning.missing.enabled:
             logger.info("Step 4: 填充缺失值 (策略: %s)", cleaning.missing.strategy)
-            df, mv_result = self.mv_cleaner.clean(df)
+            df, mv_result = self.mv_cleaner.clean(
+                df,
+                strategy=cleaning.missing.strategy,
+                constant_value=cleaning.missing.constant_value,
+            )
             repairs.append(mv_result)
             logger.info("  已填充 %d 个缺失值", mv_result.changes_made)
 
@@ -122,9 +126,11 @@ class CleaningOrchestrator:
 
         # Step 6: 异常值检测
         outliers: List[OutlierRecord] = []
-        if cleaning.outlier.action in ("flag", "remove"):
+        if cleaning.outlier.enabled and cleaning.outlier.action in ("flag", "remove"):
             logger.info("Step 6: 异常值检测 (方法: %s)", cleaning.outlier.method)
-            outliers = self.outlier_detector.detect(df)
+            outliers = self.outlier_detector.detect(
+                df, method=cleaning.outlier.method, threshold=cleaning.outlier.threshold
+            )
             if cleaning.outlier.action == "remove" and outliers:
                 df = self.outlier_detector.remove_outliers(df, outliers)
                 logger.info("  已移除 %d 个异常值行", len(outliers))
