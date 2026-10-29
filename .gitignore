@@ -50,6 +50,19 @@ m4/lt~obsolete.m4
 # Claude Code
 .claude/
 
+# Python 运行产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# 运行日志与生成的报告
+logs/
+*.log
+reports/
+
 # Generated Makefile
 # (meta build system like autotools,
 # can automatically generate from config.status script
