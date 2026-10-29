@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -61,6 +62,8 @@ class QualityMonitor:
         self.scorer = QualityScorer()
         self.drift_detector = DriftDetector() if baseline_file else None
         self._processed_files: set[str] = set()
+        # 基线缓存: (路径, mtime, DataFrame), 基线文件变化时自动失效
+        self._baseline_cache: tuple = (None, None, None)
         self._historical_trends: List[QualityTrend] = []
         self._callbacks: List[Callable[[MonitorEvent], None]] = []
 
@@ -72,10 +75,18 @@ class QualityMonitor:
         """扫描目录中所有数据文件并分析."""
         events: List[MonitorEvent] = []
 
-        for ext in self.SUPPORTED_EXTENSIONS:
-            for file_path in self.watch_dir.glob(f"**/*{ext}"):
-                if str(file_path) in self._processed_files:
-                    continue
+        # 单次 os.walk 全树遍历后按后缀过滤, 替代按扩展名多次全树 glob;
+        # 后缀比较大小写不敏感 (Windows 下 *.CSV 此前会被漏检)
+        exts = {e.lower() for e in self.SUPPORTED_EXTENSIONS}
+        candidates = []
+        for dirpath, _dirnames, filenames in os.walk(self.watch_dir):
+            for fn in filenames:
+                if fn.endswith(tuple(exts)):
+                    candidates.append(Path(dirpath) / fn)
+
+        for file_path in candidates:
+            if str(file_path) in self._processed_files:
+                continue
 
                 try:
                     event = self._process_file(file_path)
@@ -93,6 +104,18 @@ class QualityMonitor:
         self.session.events.extend(events)
 
         return events
+
+    def _get_baseline(self):
+        """返回缓存的基线 (mtime, df); 基线未变时免重读, 变化时返回 None 触发重载."""
+        cached_path, cached_mtime, cached_df = self._baseline_cache
+        if cached_path != self.baseline_file or cached_df is None:
+            return None, None
+        try:
+            if Path(self.baseline_file).stat().st_mtime == cached_mtime:
+                return cached_df, cached_mtime
+        except OSError:
+            pass
+        return None, None
 
     def _process_file(self, file_path: Path) -> MonitorEvent:
         """处理单个文件."""
@@ -113,12 +136,22 @@ class QualityMonitor:
         )
         self.session.trends.append(trend)
 
-        # 漂移检测
+        # 漂移检测 (基线按 mtime 缓存: 基线 1M 行时每新文件可省
+        # 约 1.3s 读取 + 1.8s 画像; 漂移只用到 null_rate, 但复用
+        # detect_frames 的完整实现以保证语义一致)
         drift_detected = False
         if self.drift_detector and self.baseline_file:
             try:
-                drift_report = self.drift_detector.detect(
-                    self.baseline_file, str(file_path)
+                baseline_df, baseline_mtime = self._get_baseline()
+                if baseline_df is None:
+                    baseline_df = self.loader.load(Path(self.baseline_file))
+                    baseline_mtime = Path(self.baseline_file).stat().st_mtime
+                    self._baseline_cache = (self.baseline_file, baseline_mtime, baseline_df)
+                current_df = self.loader.load(file_path)
+                drift_report = self.drift_detector.detect_frames(
+                    baseline_df, current_df,
+                    baseline_name=self.baseline_file,
+                    current_name=str(file_path),
                 )
                 drift_detected = drift_report.overall_severity.value not in ("none", "low")
                 if drift_detected:
