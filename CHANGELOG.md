@@ -53,6 +53,19 @@
 - 新增 test_production.py 覆盖鉴权/指标/Webhook/门禁/隔离/调度持久化/监控扫描
 - 修复 CI lint 债务（62 处 unused imports / undefined names）
 
+### 第四轮巡查修复
+- **安全**: Pipeline 生成器列名注入 → 生成代码任意命令执行（RCE，已端到端复现并阻断）；
+  血缘图 HTML/JS 注入转义
+- **正确性**: 遥测持久连接跨线程静默丢数据（check_same_thread + 锁）；
+  嵌套 JSON 单元格使画像/去重/多个 API 端点崩溃；
+  scipy 导入失败被静默吞掉输出零漂移假报告；
+  API 上传坏文件 500→400；规则 YAML 语法错误 500→400；
+  调度状态与 load_config 并用时 CRON 重启仍重跑；
+  tqdm 降级实现从未可用；批处理失败文件遗留陈旧输出；
+  流式验证标量流崩溃；console 消息含标签形态崩溃；
+  /clean 的 config_path 被静默忽略；
+  validate --json 与 --quarantine 同用时隔离被跳过
+
 ## [0.3.0] 及更早
 
 见 git 历史（ab296ea 及之前）。
