@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from urllib import request as _url_request
 import time
 import uuid
 from datetime import datetime
@@ -84,10 +85,7 @@ class QualityMonitor:
         if not self.webhook_url:
             return
         try:
-            import json as _json
-            from urllib import request as _request
-
-            payload = _json.dumps(
+            payload = json.dumps(
                 {
                     "text": message,  # Slack/钉钉兼容的纯文本字段
                     "session_id": self.session.session_id,
@@ -95,13 +93,13 @@ class QualityMonitor:
                     "timestamp": datetime.now().isoformat(),
                 }
             ).encode("utf-8")
-            req = _request.Request(
+            req = _url_request.Request(
                 self.webhook_url,
                 data=payload,
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with _request.urlopen(req, timeout=5) as resp:
+            with _url_request.urlopen(req, timeout=5) as resp:
                 if resp.status >= 400:
                     logger.warning("告警 Webhook 返回 %s", resp.status)
             logger.info("告警已投递到 Webhook: %s", message)
