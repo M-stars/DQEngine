@@ -81,7 +81,7 @@ class QualityMonitor:
         candidates = []
         for dirpath, _dirnames, filenames in os.walk(self.watch_dir):
             for fn in filenames:
-                if fn.endswith(tuple(exts)):
+                if fn.lower().endswith(tuple(exts)):
                     candidates.append(Path(dirpath) / fn)
 
         for file_path in candidates:
