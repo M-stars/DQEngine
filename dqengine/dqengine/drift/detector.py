@@ -245,7 +245,7 @@ class DriftDetector:
             return DriftSeverity.HIGH
         elif ks_stat >= self.KS_THRESHOLD["low"]:
             return DriftSeverity.MEDIUM
-        return DriftSeverity.LOW
+        return DriftSeverity.NONE
 
     def _psi_severity(self, psi: float) -> DriftSeverity:
         if psi >= self.PSI_THRESHOLD["high"]:
@@ -254,7 +254,7 @@ class DriftDetector:
             return DriftSeverity.HIGH
         elif psi >= self.PSI_THRESHOLD["low"]:
             return DriftSeverity.MEDIUM
-        return DriftSeverity.LOW
+        return DriftSeverity.NONE
 
     def _null_change_severity(self, change: float) -> DriftSeverity:
         if change >= self.NULL_CHANGE_THRESHOLD["high"]:
@@ -263,7 +263,7 @@ class DriftDetector:
             return DriftSeverity.HIGH
         elif change >= self.NULL_CHANGE_THRESHOLD["low"]:
             return DriftSeverity.MEDIUM
-        return DriftSeverity.LOW
+        return DriftSeverity.NONE
 
     def _compute_overall_severity(
         self, drifts: List[ColumnDriftResult]
