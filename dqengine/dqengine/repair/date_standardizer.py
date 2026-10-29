@@ -32,7 +32,8 @@ class DateStandardizer:
             Tuple of (standardized DataFrame, RepairResult).
         """
         rows_before = len(df)
-        df_clean = df.copy()
+        # 延迟拷贝: 无可标准化内容时零拷贝 (首次真正改写列前才复制)
+        df_clean = df
         changes = 0
         affected_cols = 0
         details: dict[str, str] = {}
@@ -56,6 +57,8 @@ class DateStandardizer:
                     )
                     changed = int(changed_mask.sum())
                     if changed > 0:
+                        if df_clean is df:
+                            df_clean = df.copy()
                         df_clean[col] = converted_str
                         changes += changed
                         affected_cols += 1
