@@ -279,6 +279,84 @@ API 端点：
 | `POST` | `/drift` | 漂移检测 |
 | `POST` | `/report` | 报告生成 |
 | `GET` | `/health` | 健康检查 |
+| `GET` | `/metrics` | Prometheus 指标 |
+
+## 生产部署
+
+### API 服务（带鉴权与监控）
+
+```bash
+# 启用 API Key 鉴权（未设置时实例保持开放，启动日志会明确告警）
+export DQENGINE_API_KEY="your-secret-key"
+
+# Prometheus 抓取 /metrics；健康检查走 /health（均免鉴权）
+dq serve --host 0.0.0.0 --port 8000
+
+# 带 CORS 的开发模式
+dq serve --reload
+```
+
+客户端在请求头携带 `X-API-Key: your-secret-key`。
+
+```bash
+# Nginx 反向代理示例
+location / {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+}
+```
+
+### 监控与告警投递
+
+```bash
+# 告警实时 POST 到 Webhook（兼容钉钉/企业微信/Slack 网关或自建接收端）
+export DQENGINE_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=xxx"
+dq monitor ./incoming_data -i 30 -b baseline.csv --report trend.html
+```
+
+告警载荷为 JSON，`text` 字段可直接被常见 IM 网关消费：
+
+```json
+{"text": "低质量告警 [data.csv]: 评分 36.5", "session_id": "a1b2c3d4"}
+```
+
+### 定时调度（重启安全）
+
+```python
+from dqengine.scheduler.scheduler import TaskScheduler
+from dqengine.models.schemas import ScheduledTask, ScheduleType
+
+scheduler = TaskScheduler(state_file="schedule_state.json")  # 状态持久化
+scheduler.add_task(ScheduledTask(
+    task_id="nightly", name="每夜画像",
+    schedule_type=ScheduleType.CRON, schedule_value="0 3 * * *",
+    action="profile", target_path="/data/daily/",
+))
+scheduler.start(blocking=True)  # 重启后自动恢复 next_run，CRON 不会立即重跑
+```
+
+长驻进程建议用 systemd/supervisor 托管，日志输出已全部走结构化
+logger（`logs/dqengine.log`，自动轮转）。
+
+### CI 数据质量门禁
+
+```yaml
+# GitHub Actions: 数据变更时执行质量门禁
+- name: Data quality gate
+  run: |
+    dq validate data/ --rules configs/rules.yaml --json > dq_result.json
+    # 退出码: 0=通过, 1=有违规; 违规行同时落入隔离区供人工复核
+    dq validate data/ --rules configs/rules.yaml --quarantine quarantine/
+```
+
+清洗管线同样支持门禁：`dq auto data.csv --fail-below-score 80`
+（清洗后评分低于 80 时退出码 2）。
+
+### 违规隔离区
+
+`validate --quarantine` 将违规行（去重）导出为 CSV 并附加
+`dqengine_violations` 摘要列——坏数据进入隔离区供人工复核，
+而不是混在结果里或被静默丢弃。
 
 ## 项目结构
 
