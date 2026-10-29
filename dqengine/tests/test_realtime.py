@@ -83,6 +83,8 @@ class TestStreamValidator:
         })
 
         validator = StreamValidator(mode="local")
-        results = list(validator.validate_batch_stream(df, "configs/rules.yaml", chunk_size=3))
+        # 使用绝对路径, 避免依赖 pytest 的启动目录
+        rules_path = Path(__file__).resolve().parent.parent / "configs" / "rules.yaml"
+        results = list(validator.validate_batch_stream(df, str(rules_path), chunk_size=3))
         # 10 rows, chunk_size 3 => 4 chunks
         assert len(results) == 4
