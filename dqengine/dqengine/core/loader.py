@@ -27,7 +27,10 @@ class DataLoader:
         df = loader.load("data.csv")
     """
 
-    ENCODINGS = ["utf-8", "gbk", "gb2312", "latin-1", "iso-8859-1"]
+    # gb2312 是 gbk 的子集, gbk 失败后 gb2312 必失败, 不重复尝试;
+    # 不放 latin-1/iso-8859-1: 单字节编码对任意字节序列都合法,
+    # 会让坏 UTF-8 文件被静默 mojibake 读入而不报错
+    ENCODINGS = ["utf-8", "gbk", "utf-16"]
 
     def load(
         self,
@@ -84,6 +87,24 @@ class DataLoader:
         # 且必须从 kwargs 中取出, 否则与位置参数重复必抛 TypeError
         user_encoding = kwargs.pop("encoding", None)
         encodings = [user_encoding] if user_encoding else self.ENCODINGS
+
+        # 先用 64KB 样本预探测编码, 命中后只全量读一次;
+        # 盲试编码在最坏情况下每个候选都完整解析一遍
+        # (69MB 文件每次约 1.2s), 解码错误出现得晚时浪费巨大
+        if user_encoding is None:
+            try:
+                with open(path, "rb") as f:
+                    head = f.read(65536)
+                for encoding in encodings:
+                    try:
+                        head.decode(encoding)
+                        encodings = [encoding] + [e for e in encodings if e != encoding]
+                        break
+                    except (UnicodeDecodeError, UnicodeError):
+                        continue
+            except OSError:
+                pass
+
         last_error: Exception = None
         for encoding in encodings:
             try:
@@ -91,6 +112,7 @@ class DataLoader:
                 logger.debug("CSV 加载成功: %s (编码: %s)", path.name, encoding)
                 return df
             except (UnicodeDecodeError, UnicodeError) as e:
+                # 样本之外才失败的情形仍走全量重试兜底
                 last_error = e
                 continue
         raise ValueError(f"无法解码 {path.name}, 尝试编码: {encodings}") from last_error
