@@ -20,6 +20,7 @@ class DuplicateCleaner:
         df: pd.DataFrame,
         keep: str = "first",
         duplicate_mask: "pd.Series | None" = None,
+        copy: bool = True,
     ) -> tuple[pd.DataFrame, RepairResult]:
         """Remove duplicate rows.
 
@@ -28,6 +29,8 @@ class DuplicateCleaner:
             keep: Which duplicate to keep ('first', 'last', or False to drop all).
             duplicate_mask: 预计算的 df.duplicated(keep=keep) 掩码.
                 全帧哈希约 0.5s/百万行, 调用方已算过时传入可避免重复计算.
+            copy: 结果是否复制. 编排链路中传入 False 可少一次整帧拷贝,
+                但调用方不得再引用传入的 df.
 
         Returns:
             Tuple of (cleaned DataFrame, RepairResult).
@@ -36,7 +39,9 @@ class DuplicateCleaner:
         if duplicate_mask is None:
             duplicate_mask = df.duplicated(keep=keep)
         duplicate_count = int(duplicate_mask.sum())
-        df_clean = df[~duplicate_mask].copy()
+        df_clean = df[~duplicate_mask]
+        if copy:
+            df_clean = df_clean.copy()
 
         result = RepairResult(
             operation="duplicate_removal",

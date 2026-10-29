@@ -20,7 +20,10 @@ class DateStandardizer:
     DATE_PATTERNS = ["date", "time", "dt", "created", "updated", "birth", "day"]
 
     def standardize(
-        self, df: pd.DataFrame, target_format: str = "%Y-%m-%d"
+        self,
+        df: pd.DataFrame,
+        target_format: str = "%Y-%m-%d",
+        copy: bool = True,
     ) -> tuple[pd.DataFrame, RepairResult]:
         """Detect and normalize date columns.
 
@@ -32,7 +35,8 @@ class DateStandardizer:
             Tuple of (standardized DataFrame, RepairResult).
         """
         rows_before = len(df)
-        # 延迟拷贝: 无可标准化内容时零拷贝 (首次真正改写列前才复制)
+        # 延迟拷贝: 无可标准化内容时零拷贝 (首次真正改写列前才复制);
+        # copy=False 时编排链路声明不保留原帧, 直接原帧改写
         df_clean = df
         changes = 0
         affected_cols = 0
@@ -57,7 +61,7 @@ class DateStandardizer:
                     )
                     changed = int(changed_mask.sum())
                     if changed > 0:
-                        if df_clean is df:
+                        if df_clean is df and copy:
                             df_clean = df.copy()
                         df_clean[col] = converted_str
                         changes += changed

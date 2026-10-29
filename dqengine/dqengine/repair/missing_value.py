@@ -27,6 +27,7 @@ class MissingValueCleaner:
         df: pd.DataFrame,
         strategy: str = "mean",
         constant_value: "str | None" = None,
+        copy: bool = True,
     ) -> tuple[pd.DataFrame, RepairResult]:
         """Fill missing values and return cleaned DataFrame with repair result.
 
@@ -34,6 +35,8 @@ class MissingValueCleaner:
             df: Input DataFrame.
             strategy: One of "mean", "median", "mode", "drop", "constant".
             constant_value: Fill value used by the "constant" strategy.
+            copy: 结果是否复制. 编排链路中传入 False 可少一次整帧拷贝,
+                但调用方不得再引用传入的 df.
 
         Returns:
             Tuple of (cleaned DataFrame, RepairResult).
@@ -41,7 +44,9 @@ class MissingValueCleaner:
         rows_before = len(df)
 
         if strategy == "drop":
-            df_clean = df.dropna().copy()
+            df_clean = df.dropna()
+            if copy:
+                df_clean = df_clean.copy()
             dropped = rows_before - len(df_clean)
             details = {
                 col: f"dropped rows with nulls ({int(df[col].isna().sum())} nulls)"
@@ -63,7 +68,7 @@ class MissingValueCleaner:
                 f"未知的缺失值策略: {strategy!r} (可选: mean, median, mode, drop, constant)"
             )
 
-        df_clean = df.copy()
+        df_clean = df if not copy else df.copy()
         changes = 0
         affected_cols = 0
         fill_details: dict[str, str] = {}

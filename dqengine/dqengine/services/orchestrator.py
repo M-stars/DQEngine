@@ -109,7 +109,7 @@ class CleaningOrchestrator:
         if cleaning.duplicate.enabled:
             logger.info("Step 3: 移除重复行")
             df, dup_result = self.dup_cleaner.clean(
-                df, keep=cleaning.duplicate.keep, duplicate_mask=dup_mask
+                df, keep=cleaning.duplicate.keep, duplicate_mask=dup_mask, copy=False
             )
             repairs.append(dup_result)
             logger.info("  已移除 %d 个重复行", dup_result.changes_made)
@@ -121,6 +121,7 @@ class CleaningOrchestrator:
                 df,
                 strategy=cleaning.missing.strategy,
                 constant_value=cleaning.missing.constant_value,
+                copy=False,
             )
             repairs.append(mv_result)
             logger.info("  已填充 %d 个缺失值", mv_result.changes_made)
@@ -128,7 +129,9 @@ class CleaningOrchestrator:
         # Step 5: 日期标准化
         if cleaning.date.enabled:
             logger.info("Step 5: 日期标准化")
-            df, date_result = self.date_std.standardize(df, target_format=cleaning.date.target_format)
+            df, date_result = self.date_std.standardize(
+                df, target_format=cleaning.date.target_format, copy=False
+            )
             repairs.append(date_result)
             if date_result.columns_affected > 0:
                 logger.info("  已标准化 %d 个日期列", date_result.columns_affected)
