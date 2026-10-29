@@ -114,7 +114,16 @@ def create_app() -> FastAPI:
             import yaml
 
             content = await rules_file.read()
-            rules = yaml.safe_load(content)
+            parsed = yaml.safe_load(content)
+            if not isinstance(parsed, dict):
+                return JSONResponse(
+                    content=APIResponse(
+                        success=False,
+                        message="规则文件格式错误: 应为包含 columns 键的 YAML 字典",
+                    ).model_dump(),
+                    status_code=400,
+                )
+            rules = validator._parse_rules(parsed)
         elif rules_path:
             rules = rules_path
         else:
