@@ -54,6 +54,8 @@ class TaskScheduler:
             "report": self._run_report,
         }
         self._results: List[Dict[str, Any]] = []
+        # WATCH 任务的文件快照: task_id -> {file_path: mtime}
+        self._watch_state: Dict[str, Dict[str, float]] = {}
         self.loader = DataLoader()
         self.profiler = Profiler()
         self.scorer = QualityScorer()
@@ -113,16 +115,43 @@ class TaskScheduler:
             from datetime import timedelta
             task.next_run = (now + timedelta(seconds=seconds)).isoformat()
         elif task.schedule_type == ScheduleType.CRON:
-            # 使用 croniter 计算下次运行时间
-            try:
-                from croniter import croniter
-                cron = croniter(task.schedule_value, now)
-                task.next_run = cron.get_next(datetime).isoformat()
-            except ImportError:
-                from datetime import timedelta
-                task.next_run = (now + timedelta(minutes=5)).isoformat()
+            task.next_run = self._next_cron_run(task.schedule_value, now)
         elif task.schedule_type == ScheduleType.WATCH:
             task.next_run = None  # 文件监听模式下动态触发
+
+    def _next_cron_run(self, expr: str, after: datetime) -> str:
+        """计算 cron 表达式在 after 之后的下次运行时间."""
+        try:
+            from croniter import croniter
+            return croniter(expr, after).get_next(datetime).isoformat()
+        except ImportError:
+            from datetime import timedelta
+            return (after + timedelta(minutes=5)).isoformat()
+
+    def _watch_has_changes(self, task: ScheduledTask) -> bool:
+        """轮询模式下 WATCH 任务的变更检测.
+
+        对监听路径建立文件 mtime 快照，与上次快照比较；首次见到该任务
+        仅建立基线不触发，之后快照发生变化（新增/修改/删除文件）才触发.
+        """
+        watch_path = Path(task.schedule_value) if task.schedule_value else Path(task.target_path)
+        try:
+            if watch_path.is_dir():
+                state = {
+                    str(p): p.stat().st_mtime
+                    for p in watch_path.rglob("*")
+                    if p.is_file()
+                }
+            elif watch_path.exists():
+                state = {str(watch_path): watch_path.stat().st_mtime}
+            else:
+                return False
+        except OSError:
+            return False
+
+        last_state = self._watch_state.get(task.task_id)
+        self._watch_state[task.task_id] = state
+        return last_state is not None and state != last_state
 
     def start(self, blocking: bool = True) -> None:
         """启动调度器."""
@@ -136,6 +165,10 @@ class TaskScheduler:
             print("[调度器] APScheduler 未安装，使用内置轮询模式")
             if blocking:
                 self._start_polling()
+            else:
+                import threading
+                thread = threading.Thread(target=self._start_polling, daemon=True)
+                thread.start()
 
     def _start_apscheduler(self, blocking: bool) -> None:
         """使用 APScheduler 启动."""
@@ -163,6 +196,8 @@ class TaskScheduler:
             elif task.schedule_type == ScheduleType.INTERVAL:
                 trigger = IntervalTrigger(seconds=int(task.schedule_value))
             else:
+                print(f"[调度器] 警告: APScheduler 模式暂不支持 watch 任务 [{task.name}]，"
+                      f"请改用 blocking 轮询模式")
                 continue
 
             scheduler.add_job(
@@ -195,11 +230,19 @@ class TaskScheduler:
                         continue
 
                     should_run = False
-                    if task.next_run is None:
-                        should_run = True
-                    elif task.schedule_type == ScheduleType.INTERVAL:
-                        next_run = datetime.fromisoformat(task.next_run) if task.next_run else now
-                        should_run = now >= next_run
+                    if task.schedule_type == ScheduleType.INTERVAL:
+                        if task.next_run is None:
+                            should_run = True  # 首次立即执行，随后按间隔调度
+                        else:
+                            should_run = now >= datetime.fromisoformat(task.next_run)
+                    elif task.schedule_type == ScheduleType.CRON:
+                        if task.next_run is None:
+                            # 按 cron 表达式计算首次运行时间，不立即执行
+                            task.next_run = self._next_cron_run(task.schedule_value, now)
+                        else:
+                            should_run = now >= datetime.fromisoformat(task.next_run)
+                    elif task.schedule_type == ScheduleType.WATCH:
+                        should_run = self._watch_has_changes(task)
 
                     if should_run:
                         print(f"[调度器] 执行任务: {task.name} ({task.action})")
