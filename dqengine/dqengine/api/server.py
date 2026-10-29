@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -208,7 +208,7 @@ def create_app() -> FastAPI:
     async def report_endpoint(
         file: UploadFile = File(...),
         format: str = Query("html", description="报告格式: html, json, markdown"),
-    ) -> HTMLResponse:
+    ) -> Response:
         """上传数据文件并生成质量报告."""
         df = await _read_uploaded_file(file)
         report_gen = AdvancedReportGenerator()
@@ -218,17 +218,24 @@ def create_app() -> FastAPI:
         fmt_map = {"html": ReportFormat.HTML, "json": ReportFormat.JSON, "markdown": ReportFormat.MARKDOWN}
         report_fmt = fmt_map.get(format, ReportFormat.HTML)
 
-        with tempfile.NamedTemporaryFile(suffix=f".{format}", delete=False) as tmp:
-            report_gen.generate(df, file.filename or "data", str(Path(tmp.name)), report_fmt)
-            content = Path(tmp.name).read_text(encoding="utf-8")
-            Path(tmp.name).unlink(missing_ok=True)
+        profile = profiler.profile(df, file_path=file.filename or "data")
+        score = scorer.score(df, profile)
+        paths = report_gen.generate(
+            profile=profile,
+            score=score,
+            repairs=[],
+            outliers=[],
+            df=df,
+            formats=[report_fmt],
+        )
+        content = paths[0].read_text(encoding="utf-8")
 
         media_types = {
             "html": "text/html",
             "json": "application/json",
             "markdown": "text/markdown",
         }
-        return HTMLResponse(content=content, media_type=media_types.get(format, "text/html"))
+        return Response(content=content, media_type=media_types.get(format, "text/html"))
 
     async def _read_uploaded_file(file: UploadFile) -> pd.DataFrame:
         """读取上传文件为 DataFrame."""
