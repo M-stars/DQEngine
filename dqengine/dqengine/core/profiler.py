@@ -33,9 +33,14 @@ class Profiler:
             ProfileResult with row/column counts and per-column profiles.
         """
         columns = [self._profile_column(df, col) for col in df.columns]
-        duplicate_count = (
-            df.duplicated().sum() if duplicate_row_count is None else duplicate_row_count
-        )
+        duplicate_count = duplicate_row_count
+        if duplicate_count is None:
+            try:
+                duplicate_count = df.duplicated().sum()
+            except TypeError:
+                # 嵌套 JSON/Parquet struct 列含不可哈希单元格,
+                # 字符串化后判重 (降级但可用)
+                duplicate_count = df.astype(str).duplicated().sum()
         total_cells = df.shape[0] * df.shape[1]
 
         return ProfileResult(
@@ -57,7 +62,11 @@ class Profiler:
         non_null = int(series.count())
         null_count = total - non_null
         null_rate = round(null_count / max(total, 1), 4)
-        unique_count = int(series.nunique())
+        try:
+            unique_count = int(series.nunique())
+        except TypeError:
+            # dict/list 单元格不可哈希
+            unique_count = int(series.astype(str).nunique())
         unique_rate = round(unique_count / max(total, 1), 4)
 
         numeric_stats = self._numeric_stats(series)

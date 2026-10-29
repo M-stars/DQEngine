@@ -89,7 +89,10 @@ class RuleValidator:
         if not isinstance(raw, dict):
             return []
 
-        columns_rules = raw.get("columns", {})
+        columns_rules = raw.get("columns") or {}
+        if not isinstance(columns_rules, dict):
+            # columns: null / 列表等畸形形态, 按无规则处理而非崩溃
+            return []
         for col_name, col_rules in columns_rules.items():
             if not isinstance(col_rules, dict):
                 continue

@@ -149,7 +149,12 @@ def create_app() -> FastAPI:
             import yaml
 
             content = await rules_file.read()
-            parsed = yaml.safe_load(content)
+            try:
+                parsed = yaml.safe_load(content)
+            except yaml.YAMLError as e:
+                raise HTTPException(
+                    status_code=400, detail=f"规则 YAML 语法错误: {e}"
+                )
             if not isinstance(parsed, dict):
                 return JSONResponse(
                     content=APIResponse(
@@ -305,6 +310,7 @@ def create_app() -> FastAPI:
             return loader.load_bytes(content, file_name)
         except (
             ValueError,
+            TypeError,
             UnicodeDecodeError,
             pd.errors.EmptyDataError,
             pd.errors.ParserError,

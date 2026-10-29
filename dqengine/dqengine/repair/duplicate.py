@@ -37,7 +37,11 @@ class DuplicateCleaner:
         """
         rows_before = len(df)
         if duplicate_mask is None:
-            duplicate_mask = df.duplicated(keep=keep)
+            try:
+                duplicate_mask = df.duplicated(keep=keep)
+            except TypeError:
+                # 嵌套单元格不可哈希, 字符串化判重
+                duplicate_mask = df.astype(str).duplicated(keep=keep)
         duplicate_count = int(duplicate_mask.sum())
         df_clean = df[~duplicate_mask]
         if copy:
