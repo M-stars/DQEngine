@@ -86,9 +86,8 @@ class StorageManager:
         """保存 DataFrame 到存储."""
         _quote_identifier(table_name)  # 统一校验标识符, pandas to_sql 路径同样受保护
         if self.storage_type == StorageType.SQLITE:
-            conn = sqlite3.connect(self.connection_string)
+            conn = self.connection
             df.to_sql(table_name, conn, if_exists=if_exists, index=False)
-            conn.close()
         elif self.storage_type == StorageType.DUCKDB:
             conn = self.connection
             conn.register("temp_df", df)
@@ -102,10 +101,8 @@ class StorageManager:
         """从存储加载 DataFrame."""
         table = _quote_identifier(table_name)
         if self.storage_type == StorageType.SQLITE:
-            conn = sqlite3.connect(self.connection_string)
-            df = pd.read_sql(f"SELECT * FROM {table}", conn)
-            conn.close()
-            return df
+            conn = self.connection
+            return pd.read_sql(f"SELECT * FROM {table}", conn)
         elif self.storage_type == StorageType.DUCKDB:
             conn = self.connection
             return conn.execute(f"SELECT * FROM {table}").df()
@@ -115,7 +112,7 @@ class StorageManager:
     def execute(self, query: str, params: Optional[tuple] = None) -> Any:
         """执行 SQL 查询."""
         if self.storage_type == StorageType.SQLITE:
-            conn = sqlite3.connect(self.connection_string)
+            conn = self.connection
             conn.row_factory = sqlite3.Row
             if params:
                 result = conn.execute(query, params)
@@ -123,7 +120,7 @@ class StorageManager:
                 result = conn.execute(query)
             conn.commit()
             rows = [dict(r) for r in result.fetchall()]
-            conn.close()
+            conn.row_factory = None
             return rows
         else:
             if params:
@@ -135,12 +132,11 @@ class StorageManager:
         table = _quote_identifier(table_name)
         col = _quote_identifier(column)
         if self.storage_type == StorageType.SQLITE:
-            conn = sqlite3.connect(self.connection_string)
+            conn = self.connection
             conn.execute(
                 f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_{column}" ON {table}({col})'
             )
             conn.commit()
-            conn.close()
 
     def close(self) -> None:
         """关闭连接."""

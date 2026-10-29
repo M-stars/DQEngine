@@ -51,7 +51,12 @@ class TelemetryManager:
 
     def _init_db(self) -> None:
         """初始化 SQLite 数据库."""
-        conn = sqlite3.connect(str(self._db_path))
+                # 持久连接 + WAL: 此前每条 trace/记录都新建连接并 commit
+        # (fsync 约 4ms 占大头), 高频打点下开销放大 100 倍以上
+        self._db_conn = sqlite3.connect(str(self._db_path))
+        self._db_conn.execute("PRAGMA journal_mode=WAL")
+        self._db_conn.execute("PRAGMA synchronous=NORMAL")
+        conn = self._db_conn
         conn.execute("""
             CREATE TABLE IF NOT EXISTS executions (
                 id TEXT PRIMARY KEY,
@@ -85,7 +90,7 @@ class TelemetryManager:
             )
         """)
         conn.commit()
-        conn.close()
+        # 持久连接保持打开, close() 时统一关闭
 
     # ---- Metrics ----
 
@@ -235,9 +240,8 @@ class TelemetryManager:
     # ---- Database ----
 
     def _save_trace_to_db(self, trace: ExecutionTrace) -> None:
-        conn = None
         try:
-            conn = sqlite3.connect(str(self._db_path))
+            conn = self._db_conn
             conn.execute(
                 "INSERT INTO executions VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -253,9 +257,6 @@ class TelemetryManager:
             conn.commit()
         except Exception as e:
             logger.warning("遥测数据写入数据库失败: %s", e)
-        finally:
-            if conn:
-                conn.close()
 
     def _save_rule_execution_to_db(
         self,
@@ -265,9 +266,8 @@ class TelemetryManager:
         violations_count: int,
         execution_time_ms: float,
     ) -> None:
-        conn = None
         try:
-            conn = sqlite3.connect(str(self._db_path))
+            conn = self._db_conn
             conn.execute(
                 "INSERT INTO rule_executions VALUES (NULL, ?, ?, ?, ?, ?, ?)",
                 (
@@ -282,15 +282,11 @@ class TelemetryManager:
             conn.commit()
         except Exception as e:
             logger.warning("遥测数据写入数据库失败: %s", e)
-        finally:
-            if conn:
-                conn.close()
 
     def query_executions(self, limit: int = 20) -> List[Dict[str, Any]]:
         """查询执行历史."""
-        conn = None
         try:
-            conn = sqlite3.connect(str(self._db_path))
+            conn = self._db_conn
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM executions ORDER BY start_time DESC LIMIT ?", (limit,)
@@ -299,15 +295,11 @@ class TelemetryManager:
         except Exception as e:
             logger.warning("查询执行历史失败: %s", e)
             return []
-        finally:
-            if conn:
-                conn.close()
 
     def get_execution_stats(self) -> Dict[str, Any]:
         """获取执行统计."""
-        conn = None
         try:
-            conn = sqlite3.connect(str(self._db_path))
+            conn = self._db_conn
             total = conn.execute("SELECT COUNT(*) FROM executions").fetchone()[0]
             success = conn.execute("SELECT COUNT(*) FROM executions WHERE success=1").fetchone()[0]
             avg_duration = conn.execute(
@@ -323,10 +315,12 @@ class TelemetryManager:
         except Exception as e:
             logger.warning("查询规则统计失败: %s", e)
             return {}
-        finally:
-            if conn:
-                conn.close()
 
     def close(self) -> None:
         """关闭数据库连接."""
-        pass  # SQLite 连接在每次操作后自动关闭
+        if getattr(self, "_db_conn", None):
+            try:
+                self._db_conn.close()
+            except Exception:
+                pass
+            self._db_conn = None

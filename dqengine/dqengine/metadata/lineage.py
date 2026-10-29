@@ -131,10 +131,13 @@ class LineageTracker:
         data = json.loads(path.read_text(encoding="utf-8"))
         for k, v in data.get("lineages", {}).items():
             self._lineages[k] = DataLineage(**v)
+        # 重复加载同一文件时按执行 ID 去重, 避免 executions 翻倍;
+        # 集合在循环外构建一次 (逐条重建是 O(n²), 1 万条约 10⁸ 次操作)
+        seen_ids = {x.execution_id for x in self._executions}
         for e in data.get("executions", []):
             record = ExecutionRecord(**e)
-            # 重复加载同一文件时按执行 ID 去重, 避免 executions 翻倍
-            if record.execution_id not in {x.execution_id for x in self._executions}:
+            if record.execution_id not in seen_ids:
+                seen_ids.add(record.execution_id)
                 self._executions.append(record)
 
     def generate_lineage_graph(self, dataset_id: str, output_path: str = "lineage_graph.html") -> str:
