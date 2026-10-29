@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import sqlite3
 import time
 import uuid
@@ -53,8 +54,11 @@ class TelemetryManager:
     def _init_db(self) -> None:
         """初始化 SQLite 数据库."""
                 # 持久连接 + WAL: 此前每条 trace/记录都新建连接并 commit
-        # (fsync 约 4ms 占大头), 高频打点下开销放大 100 倍以上
-        self._db_conn = sqlite3.connect(str(self._db_path))
+        # (fsync 约 4ms 占大头), 高频打点下开销放大 100 倍以上.
+        # API 端点/调度器线程会并发写入, sqlite3 连接默认禁止跨线程
+        # 使用, 必须 check_same_thread=False 并用实例级锁串行化
+        self._db_lock = threading.Lock()
+        self._db_conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._db_conn.execute("PRAGMA journal_mode=WAL")
         self._db_conn.execute("PRAGMA synchronous=NORMAL")
         conn = self._db_conn
@@ -267,20 +271,21 @@ class TelemetryManager:
 
     def _save_trace_to_db(self, trace: ExecutionTrace) -> None:
         try:
-            conn = self._db_conn
-            conn.execute(
-                "INSERT INTO executions VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    trace.trace_id,
-                    trace.operation,
-                    trace.start_time,
-                    trace.end_time,
-                    trace.duration_ms,
-                    1 if trace.success else 0,
-                    json.dumps(trace.metadata),
-                ),
-            )
-            conn.commit()
+            with self._db_lock:
+                conn = self._db_conn
+                conn.execute(
+                    "INSERT INTO executions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        trace.trace_id,
+                        trace.operation,
+                        trace.start_time,
+                        trace.end_time,
+                        trace.duration_ms,
+                        1 if trace.success else 0,
+                        json.dumps(trace.metadata),
+                    ),
+                )
+                conn.commit()
         except Exception as e:
             logger.warning("遥测数据写入数据库失败: %s", e)
 
@@ -293,31 +298,33 @@ class TelemetryManager:
         execution_time_ms: float,
     ) -> None:
         try:
-            conn = self._db_conn
-            conn.execute(
-                "INSERT INTO rule_executions VALUES (NULL, ?, ?, ?, ?, ?, ?)",
-                (
-                    rule_name,
-                    file_path,
-                    1 if passed else 0,
-                    violations_count,
-                    execution_time_ms,
-                    datetime.now().isoformat(),
-                ),
-            )
-            conn.commit()
+            with self._db_lock:
+                conn = self._db_conn
+                conn.execute(
+                    "INSERT INTO rule_executions VALUES (NULL, ?, ?, ?, ?, ?, ?)",
+                    (
+                        rule_name,
+                        file_path,
+                        1 if passed else 0,
+                        violations_count,
+                        execution_time_ms,
+                        datetime.now().isoformat(),
+                    ),
+                )
+                conn.commit()
         except Exception as e:
             logger.warning("遥测数据写入数据库失败: %s", e)
 
     def query_executions(self, limit: int = 20) -> List[Dict[str, Any]]:
         """查询执行历史."""
         try:
-            conn = self._db_conn
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT * FROM executions ORDER BY start_time DESC LIMIT ?", (limit,)
-            ).fetchall()
-            return [dict(r) for r in rows]
+            with self._db_lock:
+                conn = self._db_conn
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT * FROM executions ORDER BY start_time DESC LIMIT ?", (limit,)
+                ).fetchall()
+                return [dict(r) for r in rows]
         except Exception as e:
             logger.warning("查询执行历史失败: %s", e)
             return []
@@ -325,19 +332,22 @@ class TelemetryManager:
     def get_execution_stats(self) -> Dict[str, Any]:
         """获取执行统计."""
         try:
-            conn = self._db_conn
-            total = conn.execute("SELECT COUNT(*) FROM executions").fetchone()[0]
-            success = conn.execute("SELECT COUNT(*) FROM executions WHERE success=1").fetchone()[0]
-            avg_duration = conn.execute(
-                "SELECT AVG(duration_ms) FROM executions"
-            ).fetchone()[0] or 0
-            return {
-                "total_executions": total,
-                "successful": success,
-                "failed": total - success,
-                "success_rate": success / max(total, 1),
-                "avg_duration_ms": round(avg_duration, 2),
-            }
+            with self._db_lock:
+                conn = self._db_conn
+                total = conn.execute("SELECT COUNT(*) FROM executions").fetchone()[0]
+                success = conn.execute(
+                    "SELECT COUNT(*) FROM executions WHERE success=1"
+                ).fetchone()[0]
+                avg_duration = conn.execute(
+                    "SELECT AVG(duration_ms) FROM executions"
+                ).fetchone()[0] or 0
+                return {
+                    "total_executions": total,
+                    "successful": success,
+                    "failed": total - success,
+                    "success_rate": success / max(total, 1),
+                    "avg_duration_ms": round(avg_duration, 2),
+                }
         except Exception as e:
             logger.warning("查询规则统计失败: %s", e)
             return {}
