@@ -206,6 +206,9 @@ def auto(
     report: str = typer.Option("report.html", "--report", "-r", help="报告输出路径"),
     config: Optional[str] = typer.Option(None, "--config", "-c", help="配置文件路径"),
     no_outlier_removal: bool = typer.Option(False, "--no-outlier-removal", help="跳过异常值移除"),
+    fail_below_score: Optional[float] = typer.Option(
+        None, "--fail-below-score", help="质量门禁: 清洗后评分低于该值时以非零码退出 (CI 用)"
+    ),
 ) -> None:
     """自动检测并修复数据质量问题: 空值、重复、日期、异常值."""
     path = Path(file)
@@ -247,6 +250,12 @@ def auto(
 
         progress.update(task, completed=True, description="[green]清洗完成!")
 
+    if fail_below_score is not None and result["score_after"].overall_score < fail_below_score:
+        print_error(
+            f"质量门禁未通过: 清洗后评分 {result['score_after'].overall_score:.1f} < 门槛 {fail_below_score}"
+        )
+        raise typer.Exit(code=2)
+
     # 显示汇总
     console.print()
     score_before = result["score_before"]
@@ -265,6 +274,10 @@ def auto(
 def validate(
     file: str = typer.Argument(..., help="数据文件路径"),
     rules: str = typer.Option(..., "--rules", "-r", help="YAML 规则文件路径"),
+    quarantine: Optional[str] = typer.Option(
+        None, "--quarantine", "-q", help="违规行隔离输出路径 (CSV, 附加违规摘要列)"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="输出机器可读 JSON (供 CI 解析, 不渲染表格)"),
 ) -> None:
     """根据 YAML 规则验证数据."""
     path = Path(file)
@@ -298,6 +311,34 @@ def validate(
         raise typer.Exit(code=1)
 
     result = validator.validate(df, rules)
+
+    if json_output:
+        # CI 门禁场景: 纯 JSON 到 stdout, 不混入表格渲染
+        print(result.model_dump_json(indent=2))
+        if not result.passed:
+            raise typer.Exit(code=1)
+        return
+
+    if quarantine and result.violations:
+        # 违规行隔离: 按行位置去重后导出, 附加违规摘要列
+        row_msgs: dict = {}
+        column_level = 0
+        for v in result.violations:
+            if v.row_index < 0:
+                column_level += 1
+                continue
+            row_msgs.setdefault(v.row_index, []).append(f"{v.column}:{v.message}")
+        if row_msgs:
+            q_path = Path(quarantine)
+            q_path.parent.mkdir(parents=True, exist_ok=True)
+            q_df = df.iloc[sorted(row_msgs)].copy()
+            q_df["dqengine_violations"] = [
+                " | ".join(row_msgs[i]) for i in sorted(row_msgs)
+            ]
+            q_df.to_csv(q_path, index=False, encoding="utf-8")
+            print_success(
+                f"已隔离 {len(q_df)} 行违规数据 (另 {column_level} 条列级违规) -> {q_path}"
+            )
 
     status_style = "green" if result.passed else "red"
     status_text = "通过" if result.passed else "未通过"
