@@ -247,7 +247,7 @@ class TelemetryManager:
         """导出 Prometheus 格式指标 (含进程级内置指标)."""
         import time as _time
 
-        process = __import__("psutil") if False else None
+        __import__("psutil") if False else None
         lines: List[str] = []
         # 内置运行时指标: 无需调用方打点即有数据
         start = getattr(self, "_started_at", None)

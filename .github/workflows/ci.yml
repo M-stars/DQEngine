@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    name: Lint & Format Check
+    name: Lint (ruff, blocking)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,29 +18,20 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install black ruff isort flake8
+      - name: Install ruff
+        run: pip install ruff
 
-      - name: Run black (check)
-        run: black --check --diff dqengine/ tests/ 2>&1 || true
-
-      - name: Run ruff
-        run: ruff check dqengine/ tests/ 2>&1 || true
-
-      - name: Run isort (check)
-        run: isort --check-only dqengine/ tests/ 2>&1 || true
+      - name: Ruff (语法错误 / 未定义名 / 未使用导入 / 未使用局部变量)
+        run: ruff check dqengine/ --select E9,F63,F7,F82,F401,F811,F841
 
   test:
-    name: Tests (Python ${{ matrix.python-version }})
+    name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12"]
-
     steps:
       - uses: actions/checkout@v4
 
@@ -50,24 +41,25 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
+        working-directory: ./dqengine
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
       - name: Run tests with coverage
-        run: |
-          pytest tests/ --cov=dqengine --cov-report=xml --cov-report=term -v
+        working-directory: ./dqengine
+        run: pytest tests/ --cov=dqengine --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov (optional)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
+          files: dqengine/coverage.xml
           fail_ci_if_error: false
 
   build:
-    name: Build Check
+    name: Build & Package Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,17 +70,18 @@ jobs:
           python-version: "3.11"
 
       - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
+        run: pip install build twine
 
-      - name: Build package
-        run: |
-          cd dqengine
-          python -m build
+      - name: Build sdist & wheel
+        working-directory: ./dqengine
+        run: python -m build
 
-      - name: Verify package
+      - name: Twine metadata check
+        working-directory: ./dqengine
+        run: twine check dist/*
+
+      - name: Install wheel and verify entry point
         run: |
-          cd dqengine
-          pip install dist/*.whl
-          dq version
+          pip install --force-reinstall dqengine/dist/*.whl
+          dq --help
+          python -c "import dqengine; print(dqengine.__version__)"

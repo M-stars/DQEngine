@@ -697,7 +697,7 @@ def doctor() -> None:
     if not plugins_dir.exists():
         plugins_dir = Path(__file__).parent.parent / "plugins"
     loaded_plugins = registry.discover(plugins_dir)
-    plugin_names = [p.name for p in loaded_plugins]
+    [p.name for p in loaded_plugins]
 
     # 检查配置文件
     config_found = Path("configs/default.yaml").exists()
