@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import pandas as pd
-from fastapi import BackgroundTasks, FastAPI, File, Query, Request, Response, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -301,6 +301,18 @@ def create_app() -> FastAPI:
         """读取上传文件为 DataFrame (内存直读, 免临时落盘往返)."""
         content = await file.read()
         file_name = file.filename or "data.csv"
-        return loader.load_bytes(content, file_name)
+        try:
+            return loader.load_bytes(content, file_name)
+        except (
+            ValueError,
+            UnicodeDecodeError,
+            pd.errors.EmptyDataError,
+            pd.errors.ParserError,
+        ) as e:
+            # 用户输入问题 -> 400 并给出原因; 其他异常保持 500
+            raise HTTPException(
+                status_code=400,
+                detail=f"无法解析上传文件 {file_name}: {type(e).__name__}: {e}",
+            )
 
     return app
