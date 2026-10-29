@@ -210,6 +210,56 @@ class DataLoader:
             conn.close()
         return df
 
+    def load_bytes(self, content: bytes, file_name: str, **kwargs) -> pd.DataFrame:
+        """从内存字节加载 DataFrame (供 API 上传等场景免落盘).
+
+        Args:
+            content: 文件字节内容.
+            file_name: 原始文件名 (用于识别格式).
+            **kwargs: 传递给底层 pandas 读取函数的额外参数.
+
+        Returns:
+            DataFrame.
+
+        Raises:
+            ValueError: 不支持的格式或无法解码.
+        """
+        import io
+
+        suffix = Path(file_name).suffix.lower()
+        if suffix == ".csv":
+            # 与 load_csv 相同的编码探测, 但作用于内存字节
+            user_encoding = kwargs.pop("encoding", None)
+            encodings = [user_encoding] if user_encoding else self.ENCODINGS
+            if user_encoding is None:
+                head = content[:65536]
+                for encoding in encodings:
+                    try:
+                        head.decode(encoding)
+                        encodings = [encoding] + [e for e in encodings if e != encoding]
+                        break
+                    except (UnicodeDecodeError, UnicodeError):
+                        continue
+            last_error: Exception = None
+            for encoding in encodings:
+                try:
+                    return pd.read_csv(io.BytesIO(content), encoding=encoding, **kwargs)
+                except (UnicodeDecodeError, UnicodeError) as e:
+                    last_error = e
+                    continue
+            raise ValueError(f"无法解码 {file_name}, 尝试编码: {encodings}") from last_error
+        elif suffix in (".xlsx", ".xls"):
+            return pd.read_excel(io.BytesIO(content), **kwargs)
+        elif suffix == ".json":
+            try:
+                return pd.read_json(io.BytesIO(content), **kwargs)
+            except ValueError:
+                return pd.read_json(io.BytesIO(content), lines=True, **kwargs)
+        elif suffix == ".parquet":
+            return pd.read_parquet(io.BytesIO(content), **kwargs)
+        else:
+            raise ValueError(f"不支持的文件格式: {suffix} (支持 csv/xlsx/json/parquet)")
+
     def detect_format(self, file_path: "str | Path") -> str:
         """检测文件格式.
 

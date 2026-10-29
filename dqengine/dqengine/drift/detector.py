@@ -56,7 +56,42 @@ class DriftDetector:
         """执行完整漂移检测."""
         baseline_df = self.loader.load(Path(baseline_path))
         current_df = self.loader.load(Path(current_path))
+        return self.detect_frames(
+            baseline_df,
+            current_df,
+            baseline_name=baseline_path,
+            current_name=current_path,
+            output_json=output_json,
+            output_html=output_html,
+        )
 
+    def detect_frames(
+        self,
+        baseline_df: pd.DataFrame,
+        current_df: pd.DataFrame,
+        baseline_name: str = "baseline",
+        current_name: str = "current",
+        output_json: Optional[str] = None,
+        output_html: Optional[str] = None,
+    ) -> DriftReport:
+        """对内存中的两个 DataFrame 执行漂移检测.
+
+        API 等已有 DataFrame 的调用方用它可避免 落盘→重读 的
+        完整序列化往返 (每请求约 3-6s 纯磁盘 I/O).
+
+        Args:
+            baseline_df: 基线数据.
+            current_df: 当前数据.
+            baseline_name: 报告中展示的基线名称.
+            current_name: 报告中展示的当前名称.
+            output_json: JSON 摘要输出路径 (可选).
+            output_html: HTML 报告输出路径 (可选).
+
+        Returns:
+            DriftReport.
+        """
+        baseline_path = baseline_name
+        current_path = current_name
         baseline_profile = self.profiler.profile(baseline_df, file_path=baseline_path)
         current_profile = self.profiler.profile(current_df, file_path=current_path)
 
