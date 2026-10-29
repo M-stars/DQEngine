@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy import stats
+# scipy 冷导入约 0.5s, 延迟到实际执行 KS 检测的函数内
+# (该函数逐列调用, 模块缓存后开销归零)
 
 from dqengine.core.loader import DataLoader
 from dqengine.core.profiler import Profiler
@@ -184,6 +185,8 @@ class DriftDetector:
                 continue
 
             try:
+                from scipy import stats
+
                 ks_stat, ks_pvalue = stats.ks_2samp(b_data, c_data)
             except Exception:
                 continue
