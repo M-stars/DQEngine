@@ -190,7 +190,7 @@ class TaskScheduler:
     def start(self, blocking: bool = True) -> None:
         """启动调度器."""
         self._running = True
-        logger.info("[调度器] 启动: {len(self.tasks)} 个任务")
+        logger.info(f"[调度器] 启动: {len(self.tasks)} 个任务")
 
         # 使用 APScheduler (如果可用)
         try:
@@ -282,7 +282,7 @@ class TaskScheduler:
                         should_run = self._watch_has_changes(task)
 
                     if should_run:
-                        logger.info("[调度器] 执行任务: {task.name} ({task.action})")
+                        logger.info(f"[调度器] 执行任务: {task.name} ({task.action})")
                         self._execute_task(task)
 
                 time.sleep(10)
@@ -296,7 +296,7 @@ class TaskScheduler:
             try:
                 self._apscheduler.shutdown(wait=False)
             except Exception as e:
-                logger.info("[调度器] APScheduler 关闭异常: {e}")
+                logger.info(f"[调度器] APScheduler 关闭异常: {e}")
             finally:
                 self._apscheduler = None
 
@@ -305,7 +305,7 @@ class TaskScheduler:
         try:
             executor = self._executors.get(task.action)
             if executor is None:
-                logger.info("[调度器] 未知操作: {task.action}")
+                logger.info(f"[调度器] 未知操作: {task.action}")
                 return
 
             result = executor(task)
@@ -317,7 +317,7 @@ class TaskScheduler:
                 del self._results[: len(self._results) - 1000]
             self.update_next_run(task)
         except Exception as e:
-            logger.error("[调度器] 任务失败 [{task.name}]: {e}")
+            logger.error(f"[调度器] 任务失败 [{task.name}]: {e}")
             self._results.append(
                 {
                     "task_id": task.task_id,

@@ -164,7 +164,7 @@ class QualityMonitor:
                     )
             except Exception as e:
                 # 漂移是监控的核心告警能力, 失败必须可见, 否则静默漏报
-                logger.error("[监控] 漂移检测失败 [{file_path.name}]: {e}")
+                logger.error(f"[监控] 漂移检测失败 [{file_path.name}]: {e}")
 
         # 阈值告警
         if score.overall_score < 60:
@@ -186,7 +186,7 @@ class QualityMonitor:
             try:
                 cb(event)
             except Exception as e:
-                logger.error("[监控] 回调执行失败: {e}")
+                logger.error(f"[监控] 回调执行失败: {e}")
 
         return event
 
@@ -198,8 +198,8 @@ class QualityMonitor:
         import time as _time
 
         interval_seconds = max(1, int(interval_seconds))
-        logger.info("[监控] 开始轮询: {self.watch_dir} (间隔: {interval_seconds}s)")
-        logger.info("[监控] 会话 ID: {self.session.session_id}")
+        logger.info(f"[监控] 开始轮询: {self.watch_dir} (间隔: {interval_seconds}s)")
+        logger.info(f"[监控] 会话 ID: {self.session.session_id}")
         try:
             while True:
                 events = self.scan_directory()
@@ -215,7 +215,7 @@ class QualityMonitor:
                 self._save_trends()
                 _time.sleep(interval_seconds)
         except KeyboardInterrupt:
-            logger.info("\n[监控] 停止轮询. 共处理 {self.session.total_files_processed} 个文件")
+            logger.info(f"\n[监控] 停止轮询. 共处理 {self.session.total_files_processed} 个文件")
             self._save_trends()
             # 向调用方传播, 让其执行停止后的收尾逻辑 (如生成趋势报告)
             raise
@@ -241,7 +241,7 @@ class QualityMonitor:
                     return
                 if str(path) in monitor._processed_files:
                     return
-                logger.info("[监控] 检测到新文件: {path.name}")
+                logger.info(f"[监控] 检测到新文件: {path.name}")
                 try:
                     monitor._process_file(path)
                     monitor._save_trends()
@@ -261,10 +261,10 @@ class QualityMonitor:
                         timer.daemon = True
                         timer.start()
                     else:
-                        logger.error("[监控] 处理失败, 已放弃: {path.name} - {e}")
+                        logger.error(f"[监控] 处理失败, 已放弃: {path.name} - {e}")
 
-        logger.info("[监控] 开始 Watchdog 监听: {self.watch_dir}")
-        logger.info("[监控] 会话 ID: {self.session.session_id}")
+        logger.info(f"[监控] 开始 Watchdog 监听: {self.watch_dir}")
+        logger.info(f"[监控] 会话 ID: {self.session.session_id}")
 
         observer = Observer()
         observer.schedule(DataFileHandler(), str(self.watch_dir), recursive=True)
