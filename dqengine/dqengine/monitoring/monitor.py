@@ -52,9 +52,13 @@ class QualityMonitor:
         watch_directory: str,
         baseline_file: Optional[str] = None,
         trends_file: str = "quality_trends.json",
+        webhook_url: Optional[str] = None,
     ) -> None:
         self.watch_dir = Path(watch_directory)
         self.baseline_file = baseline_file
+        # 告警投递: 通用 JSON Webhook (兼容钉钉/企微/Slack 的网关或自建接收端),
+        # 优先取构造参数, 其次环境变量 DQENGINE_WEBHOOK_URL
+        self.webhook_url = webhook_url or os.environ.get("DQENGINE_WEBHOOK_URL")
         self.trends_file = Path(trends_file)
         self.session = MonitorSession(
             session_id=str(uuid.uuid4())[:8],
@@ -70,6 +74,39 @@ class QualityMonitor:
         self._baseline_cache: tuple = (None, None, None)
         self._historical_trends: List[QualityTrend] = []
         self._callbacks: List[Callable[[MonitorEvent], None]] = []
+
+    def _emit_alert(self, message: str) -> None:
+        """记录告警并投递到 Webhook (已配置时).
+
+        投递失败只记日志不中断监控——告警通道故障不应放大为数据管道故障.
+        """
+        self.session.alerts.append(message)
+        if not self.webhook_url:
+            return
+        try:
+            import json as _json
+            from urllib import request as _request
+
+            payload = _json.dumps(
+                {
+                    "text": message,  # Slack/钉钉兼容的纯文本字段
+                    "session_id": self.session.session_id,
+                    "alert": message,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            ).encode("utf-8")
+            req = _request.Request(
+                self.webhook_url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with _request.urlopen(req, timeout=5) as resp:
+                if resp.status >= 400:
+                    logger.warning("告警 Webhook 返回 %s", resp.status)
+            logger.info("告警已投递到 Webhook: %s", message)
+        except Exception as e:
+            logger.warning("告警 Webhook 投递失败 (%s): %s", self.webhook_url, e)
 
     def on_event(self, callback: Callable[[MonitorEvent], None]) -> None:
         """注册事件回调."""
@@ -102,7 +139,7 @@ class QualityMonitor:
                     file_path=str(file_path),
                     event_type="created",
                 )
-                self.session.alerts.append(f"处理失败: {file_path.name} - {e}")
+                self._emit_alert(f"处理失败: {file_path.name} - {e}")
                 events.append(event)
 
         self.session.events.extend(events)
@@ -159,7 +196,7 @@ class QualityMonitor:
                 )
                 drift_detected = drift_report.overall_severity.value not in ("none", "low")
                 if drift_detected:
-                    self.session.alerts.append(
+                    self._emit_alert(
                         f"漂移检测告警 [{file_path.name}]: {drift_report.overall_severity.value}"
                     )
             except Exception as e:
@@ -168,7 +205,7 @@ class QualityMonitor:
 
         # 阈值告警
         if score.overall_score < 60:
-            self.session.alerts.append(
+            self._emit_alert(
                 f"低质量告警 [{file_path.name}]: 评分 {score.overall_score:.1f}"
             )
 
