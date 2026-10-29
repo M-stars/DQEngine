@@ -87,6 +87,12 @@ class StreamValidator:
         with open(path, encoding="utf-8") as f:
             events_data = json.load(f)
 
+        # 规则只解析一次: 逐条 validate 传路径字符串会让每条事件
+        # 重新 open + yaml 解析 (实测 10 万事件浪费约 40s)
+        stream_rules = None
+        if self.validator and self.rules_path:
+            stream_rules = self.validator.load_rules(self.rules_path)
+
         # 支持单条对象或对象数组
         if isinstance(events_data, dict):
             events_data = [events_data]
@@ -117,10 +123,10 @@ class StreamValidator:
             violations = []
             passed = True
 
-            if self.validator and self.rules_path:
+            if stream_rules is not None:
                 df = pd.DataFrame([data])
                 try:
-                    result = self.validator.validate(df, self.rules_path)
+                    result = self.validator.validate(df, stream_rules)
                     violations = result.violations
                     passed = result.passed
                 except Exception as e:
