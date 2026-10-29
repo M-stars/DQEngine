@@ -44,17 +44,24 @@ class DateStandardizer:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", UserWarning)
                     converted = pd.to_datetime(df_clean[col], errors="coerce")
+                converted_str = converted.dt.strftime(target_format)
                 valid_before = df_clean[col].notna().sum()
                 valid_after = converted.notna().sum()
 
-                if valid_after > valid_before * 0.5:
-                    df_clean[col] = converted.dt.strftime(target_format)
-                    df_clean[col] = df_clean[col].replace("NaT", pd.NA)
-                    changes += abs(valid_after - valid_before)
-                    affected_cols += 1
-                    details[col] = (
-                        f"standardized {valid_after}/{rows_before} values to {target_format}"
+                # Only apply when conversion preserves every previously valid
+                # value; coercing unparseable values would silently null them.
+                if valid_before > 0 and valid_after >= valid_before:
+                    changed_mask = converted.notna() & (
+                        df_clean[col].astype(str) != converted_str
                     )
+                    changed = int(changed_mask.sum())
+                    if changed > 0:
+                        df_clean[col] = converted_str
+                        changes += changed
+                        affected_cols += 1
+                        details[col] = (
+                            f"standardized {changed}/{rows_before} values to {target_format}"
+                        )
             except (ValueError, TypeError):
                 continue
 
@@ -74,7 +81,18 @@ class DateStandardizer:
         candidates = []
 
         for col in df.columns:
-            col_lower = col.lower()
+            # Numeric columns whose names merely look date-ish (unix timestamps,
+            # "day" counters) must never be reformatted — parsing them as
+            # nanoseconds turns every value into 1970-01-01.
+            convertible = (
+                pd.api.types.is_object_dtype(df[col])
+                or pd.api.types.is_string_dtype(df[col])
+                or pd.api.types.is_datetime64_any_dtype(df[col])
+            )
+            if not convertible:
+                continue
+
+            col_lower = str(col).lower()
             # Name-based heuristic
             if any(pattern in col_lower for pattern in self.DATE_PATTERNS):
                 candidates.append(col)
