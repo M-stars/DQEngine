@@ -268,10 +268,10 @@ class PipelineGenerator:
         calls_code = "\n".join(step_calls)
         total_steps = len(pipeline.steps) + 2  # load + save + cleaning steps
 
-        # Windows paths (C:\Users\...) form invalid \U escapes inside a
-        # regular docstring — normalize to forward slashes for embedding.
-        input_file = pipeline.input_file.replace("\\", "/")
-        output_file = pipeline.output_file.replace("\\", "/")
+        # Windows 路径 (C:\Users\...) 在普通 docstring 里触发 \U
+        # unicodeescape 错误; 三连引号则终止 docstring —— 均安全化
+        input_file = self._docstring_safe(pipeline.input_file)
+        output_file = self._docstring_safe(pipeline.output_file)
 
         return PIPELINE_TEMPLATE.format(
             generated_at=pipeline.generated_at,
@@ -281,6 +281,16 @@ class PipelineGenerator:
             pipeline_calls=calls_code,
             step_count=total_steps,
         )
+
+    @staticmethod
+    def _docstring_safe(text: str) -> str:
+        """使文本可安全嵌入生成代码的三引号 docstring.
+
+        CSV 列名等用户文本可能包含三连引号 (提前终止 docstring, 其后
+        内容被当作代码执行 —— 已实测可构造任意命令执行) 或反斜杠
+        (触发 unicodeescape SyntaxError). 两者在此归一化.
+        """
+        return str(text).replace("\\", "/").replace('"""', "'''")
 
     # Parameters each repair method actually accepts; anything else in
     # step.parameters is informational and must not be forwarded, or the
@@ -310,11 +320,16 @@ class PipelineGenerator:
 
         # OutlierDetector.detect returns list[OutlierRecord], not a
         # (df, result) tuple — the generated code must handle it accordingly.
+        if not str(step.step_name).isidentifier():
+            raise ValueError(f"步骤名必须是合法 Python 标识符: {step.step_name!r}")
+        safe_desc = self._docstring_safe(step.description)
+        safe_step_name = self._docstring_safe(step.step_name)
+
         if step.class_name == "OutlierDetector" and step.method == "detect":
             action = step.parameters.get("action", "flag")
             if action == "remove":
                 return f'''def {step.step_name}(df: pd.DataFrame) -> pd.DataFrame:
-    """Step {index}: {step.description}
+    """Step {index}: {safe_desc}
 
     使用 {step.class_name}.detect() + remove_outliers()
     """
@@ -323,12 +338,12 @@ class PipelineGenerator:
     detector = {step.class_name}()
     outliers = detector.detect({call_args})
     df_clean = detector.remove_outliers(df, outliers)
-    print(f"  [{step.step_name}] 检出 {{len(outliers)}} 个异常值, "
+    print(f"  [{safe_step_name}] 检出 {{len(outliers)}} 个异常值, "
           f"移除 {{len(df) - len(df_clean)}} 行")
     return df_clean'''
 
             return f'''def {step.step_name}(df: pd.DataFrame) -> pd.DataFrame:
-    """Step {index}: {step.description}
+    """Step {index}: {safe_desc}
 
     使用 {step.class_name}.detect()
     """
@@ -336,11 +351,11 @@ class PipelineGenerator:
 
     detector = {step.class_name}()
     outliers = detector.detect({call_args})
-    print(f"  [{step.step_name}] 检出 {{len(outliers)}} 个异常值 (action=flag, 不修改数据)")
+    print(f"  [{safe_step_name}] 检出 {{len(outliers)}} 个异常值 (action=flag, 不修改数据)")
     return df'''
 
         return f'''def {step.step_name}(df: pd.DataFrame) -> pd.DataFrame:
-    """Step {index}: {step.description}
+    """Step {index}: {safe_desc}
 
     使用 {step.class_name}.{step.method}()
     """
@@ -348,6 +363,6 @@ class PipelineGenerator:
 
     processor = {step.class_name}()
     df_clean, result = processor.{step.method}({call_args})
-    print(f"  [{step.step_name}] {{result.changes_made}} 处变更, "
+    print(f"  [{safe_step_name}] {{result.changes_made}} 处变更, "
           f"{{result.columns_affected}} 列受影响")
     return df_clean'''
