@@ -15,18 +15,26 @@ class DuplicateCleaner:
         df_clean, result = cleaner.clean(df)
     """
 
-    def clean(self, df: pd.DataFrame, keep: str = "first") -> tuple[pd.DataFrame, RepairResult]:
+    def clean(
+        self,
+        df: pd.DataFrame,
+        keep: str = "first",
+        duplicate_mask: "pd.Series | None" = None,
+    ) -> tuple[pd.DataFrame, RepairResult]:
         """Remove duplicate rows.
 
         Args:
             df: Input DataFrame.
             keep: Which duplicate to keep ('first', 'last', or False to drop all).
+            duplicate_mask: 预计算的 df.duplicated(keep=keep) 掩码.
+                全帧哈希约 0.5s/百万行, 调用方已算过时传入可避免重复计算.
 
         Returns:
             Tuple of (cleaned DataFrame, RepairResult).
         """
         rows_before = len(df)
-        duplicate_mask = df.duplicated(keep=keep)
+        if duplicate_mask is None:
+            duplicate_mask = df.duplicated(keep=keep)
         duplicate_count = int(duplicate_mask.sum())
         df_clean = df[~duplicate_mask].copy()
 

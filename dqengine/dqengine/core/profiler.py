@@ -15,18 +15,27 @@ class Profiler:
         result = profiler.profile(df, file_path="data.csv")
     """
 
-    def profile(self, df: pd.DataFrame, file_path: str = "") -> ProfileResult:
+    def profile(
+        self,
+        df: pd.DataFrame,
+        file_path: str = "",
+        duplicate_row_count: "int | None" = None,
+    ) -> ProfileResult:
         """Profile all columns in a DataFrame.
 
         Args:
             df: Input DataFrame.
             file_path: Original file path for reference in the result.
+            duplicate_row_count: 预计算的重复行数 (df.duplicated().sum()).
+                全帧哈希约 0.5s/百万行, 调用方已算过时传入可避免重复计算.
 
         Returns:
             ProfileResult with row/column counts and per-column profiles.
         """
         columns = [self._profile_column(df, col) for col in df.columns]
-        duplicate_count = df.duplicated().sum()
+        duplicate_count = (
+            df.duplicated().sum() if duplicate_row_count is None else duplicate_row_count
+        )
         total_cells = df.shape[0] * df.shape[1]
 
         return ProfileResult(
@@ -44,8 +53,9 @@ class Profiler:
         """Profile a single column."""
         series = df[column]
         total = len(series)
+        # count() 一次扫描即可推导空值数, 省掉 isna().sum() 的第二次全列扫描
         non_null = int(series.count())
-        null_count = int(series.isna().sum())
+        null_count = total - non_null
         null_rate = round(null_count / max(total, 1), 4)
         unique_count = int(series.nunique())
         unique_rate = round(unique_count / max(total, 1), 4)

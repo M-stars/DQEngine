@@ -96,16 +96,21 @@ class CleaningOrchestrator:
         original_rows = len(df)
         repairs: List[RepairResult] = []
 
-        # Step 2: 清洗前画像
+        # Step 2: 清洗前画像 (重复掩码只算一次, 供画像与去重共用)
         logger.info("Step 2: 清洗前数据分析")
-        profile_before = self.profiler.profile(df, file_path=str(path))
+        dup_mask = df.duplicated(keep=cleaning.duplicate.keep)
+        profile_before = self.profiler.profile(
+            df, file_path=str(path), duplicate_row_count=int(dup_mask.sum())
+        )
         score_before = self.scorer.score(df, profile_before)
         logger.info("  清洗前质量评分: %.1f (%s)", score_before.overall_score, score_before.grade)
 
         # Step 3: 重复值移除
         if cleaning.duplicate.enabled:
             logger.info("Step 3: 移除重复行")
-            df, dup_result = self.dup_cleaner.clean(df, keep=cleaning.duplicate.keep)
+            df, dup_result = self.dup_cleaner.clean(
+                df, keep=cleaning.duplicate.keep, duplicate_mask=dup_mask
+            )
             repairs.append(dup_result)
             logger.info("  已移除 %d 个重复行", dup_result.changes_made)
 
