@@ -88,18 +88,18 @@ class QualityMonitor:
             if str(file_path) in self._processed_files:
                 continue
 
-                try:
-                    event = self._process_file(file_path)
-                    events.append(event)
-                    self._processed_files.add(str(file_path))
-                except Exception as e:
-                    event = MonitorEvent(
-                        timestamp=datetime.now().isoformat(),
-                        file_path=str(file_path),
-                        event_type="created",
-                    )
-                    self.session.alerts.append(f"处理失败: {file_path.name} - {e}")
-                    events.append(event)
+            try:
+                event = self._process_file(file_path)
+                events.append(event)
+                self._processed_files.add(str(file_path))
+            except Exception as e:
+                event = MonitorEvent(
+                    timestamp=datetime.now().isoformat(),
+                    file_path=str(file_path),
+                    event_type="created",
+                )
+                self.session.alerts.append(f"处理失败: {file_path.name} - {e}")
+                events.append(event)
 
         self.session.events.extend(events)
 
