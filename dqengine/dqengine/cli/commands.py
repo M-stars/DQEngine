@@ -12,15 +12,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table as RichTable
 
 from dqengine import __version__
-from dqengine.core.loader import DataLoader
-from dqengine.core.profiler import Profiler
-from dqengine.core.scorer import QualityScorer
-from dqengine.repair.missing_value import MissingValueCleaner
-from dqengine.repair.duplicate import DuplicateCleaner
-from dqengine.repair.date_standardizer import DateStandardizer
-from dqengine.repair.outlier import OutlierDetector
-from dqengine.rules.validator import RuleValidator
-from dqengine.report.generator import ReportGenerator
 # 第二阶段模块 — 延迟导入以支持可选依赖
 from dqengine.models.schemas import (
     SemanticType,
@@ -138,6 +129,10 @@ def profile(
 
     console.print()
     console.print(Panel.fit(f"[bold]数据分析:[/bold] {path.name}", border_style="cyan"))
+
+    from dqengine.core.loader import DataLoader
+    from dqengine.core.profiler import Profiler
+    from dqengine.core.scorer import QualityScorer
 
     loader = DataLoader()
     profiler = Profiler()
@@ -290,6 +285,9 @@ def validate(
         )
     )
 
+    from dqengine.core.loader import DataLoader
+    from dqengine.rules.validator import RuleValidator
+
     loader = DataLoader()
     validator = RuleValidator()
 
@@ -360,6 +358,8 @@ def semantic(
     console.print()
     console.print(Panel.fit(f"[bold]语义识别:[/bold] {path.name}", border_style="cyan"))
 
+    from dqengine.core.loader import DataLoader
+
     loader = DataLoader()
     detector = SemanticDetector()
 
@@ -372,6 +372,8 @@ def semantic(
     result = detector.detect(df, file_path=str(path))
 
     # 显示结果
+    from dqengine.models.schemas import SemanticType
+
     recognized = [f for f in result.fields if f.detected_type != SemanticType.UNKNOWN]
     unknown = [f for f in result.fields if f.detected_type == SemanticType.UNKNOWN]
 
@@ -744,6 +746,8 @@ def ai_generate_rules(
 
     console.print()
     console.print(Panel.fit(f"[bold]AI 规则生成:[/bold] {path.name}", border_style="cyan"))
+
+    from dqengine.core.loader import DataLoader
 
     loader = DataLoader()
     try:
