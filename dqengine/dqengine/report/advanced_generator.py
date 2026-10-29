@@ -9,6 +9,7 @@ from html import escape
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 import pandas as pd
 
 from dqengine.models.schemas import (
@@ -244,8 +245,23 @@ class AdvancedReportGenerator:
             numeric_cols = df.select_dtypes(include=["number"]).columns
             for col in list(numeric_cols)[:4]:  # 最多4个
                 hist_fig = go.Figure()
+                # Python 侧预分箱: go.Histogram 的 nbinsx 只是传给前端的
+                # 建议, 原始数组仍会全部序列化进 HTML (1M 值约 11MB/列);
+                # 先聚合再画 Bar, 报告体积从 MB 级降到 KB 级
+                series_h = df[col].dropna()
+                if len(series_h) == 0:
+                    continue
+                counts, bin_edges = np.histogram(series_h, bins=30)
+                centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                widths = np.diff(bin_edges)
                 hist_fig.add_trace(
-                    go.Histogram(x=df[col].dropna(), name=col, nbinsx=30)
+                    go.Bar(
+                        x=centers,
+                        y=counts,
+                        width=widths,
+                        name=col,
+                        marker_color="#3498db",
+                    )
                 )
                 hist_fig.update_layout(
                     title=f"{col} 分布",
