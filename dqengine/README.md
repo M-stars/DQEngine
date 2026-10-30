@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python 3.9+">
-  <img src="https://img.shields.io/badge/version-0.3.0-blue.svg" alt="Version 0.3.0">
+  <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version 1.0.0">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/status-active-brightgreen.svg" alt="Status: Active">
 </p>
@@ -230,7 +230,7 @@ pipeline:
 ```
 dqengine/
 ├── dqengine/                    # 主包
-│   ├── __init__.py              # v0.3.0
+│   ├── __init__.py              # v1.0.0
 │   ├── cli/commands.py          # CLI 命令 (17+ 命令)
 │   ├── core/                    # 核心引擎 (loader/profiler/scorer)
 │   ├── repair/                  # 数据修复 (missing/dup/date/outlier)
@@ -292,10 +292,10 @@ make test-cov
 
 ```bash
 # 构建
-docker build -t dqengine:0.3.0 .
+docker build -t dqengine:1.0.0 .
 
 # 运行 API
-docker run -p 8000:8000 dqengine:0.3.0
+docker run -p 8000:8000 dqengine:1.0.0
 
 # Docker Compose
 docker-compose up -d
@@ -323,7 +323,7 @@ docker-compose up -d
 
 ## 路线图
 
-### v0.3.0 (当前) — AI-Driven Platform
+### v1.0.0 (当前) — AI-Driven Platform
 - [x] AI 规则生成 (统计推断 + LLM Stub)
 - [x] 数据漂移检测 (KS/PSI)
 - [x] 持续质量监控 (watchdog + 趋势)

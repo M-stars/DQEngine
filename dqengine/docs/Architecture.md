@@ -3,7 +3,7 @@
 ## 架构演进
 
 ```
-Phase 1 (v0.1.0)          Phase 2 (v0.2.0)          Phase 3 (v0.3.0)
+Phase 1 (v0.1.0)          Phase 2 (v0.2.0)          Phase 3 (v1.0.0)
 ┌─────────────┐      ┌───────────────────┐      ┌──────────────────────────┐
 │  CLI        │      │  CLI + 6 modules  │      │  CLI + 14 modules        │
 │  Core       │  →   │  Semantic         │  →   │  AI / Drift / Monitor    │

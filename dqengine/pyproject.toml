@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dqengine"
-version = "0.3.0"
+version = "1.0.0"
 description = "A lightweight, automated, developer-friendly data quality governance framework"
 readme = "README.md"
 license = {text = "MIT"}

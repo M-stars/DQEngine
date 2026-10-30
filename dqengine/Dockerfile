@@ -4,7 +4,7 @@ FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="DQEngine"
 LABEL org.opencontainers.image.description="AI-Driven Data Quality Platform"
-LABEL org.opencontainers.image.version="0.3.0"
+LABEL org.opencontainers.image.version="1.0.0"
 
 WORKDIR /app
 

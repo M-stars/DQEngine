@@ -4,7 +4,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.0.0] - 2026-10-31
+
+首个正式发布版本。
 
 ### 新增：数据库连接器与分布式执行（热插拔插件）
 - 插件体系新增两类基类：`BaseConnector`（数据源连接器，按 URI scheme 路由）与
