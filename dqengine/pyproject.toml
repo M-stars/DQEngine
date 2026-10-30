@@ -59,6 +59,18 @@ dev = [
 db = [
     "sqlalchemy>=2.0.0",
 ]
+postgres = [
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9",
+]
+mysql = [
+    "sqlalchemy>=2.0.0",
+    "pymysql>=1.1",
+]
+dask = [
+    "dask[dataframe]>=2024.1.0",
+    "distributed>=2024.1.0",
+]
 api = [
     "fastapi>=0.109.0",
     "uvicorn>=0.27.0",
@@ -80,6 +92,10 @@ all = [
     "flake8>=7.0.0",
     "pre-commit>=3.6.0",
     "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9",
+    "pymysql>=1.1",
+    "dask[dataframe]>=2024.1.0",
+    "distributed>=2024.1.0",
     "scipy>=1.11.0",
     "fastapi>=0.109.0",
     "uvicorn>=0.27.0",

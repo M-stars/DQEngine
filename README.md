@@ -19,7 +19,8 @@
 
 - **CLI 即用**：一条命令完成数据质量治理，无需复杂配置
 - **可扩展**：热插拔插件架构 + 语义引擎 + 自定义规则
-- **多数据源**：CSV / Excel / JSON / Parquet / SQLite 自动识别
+- **多数据源**：CSV / Excel / JSON / Parquet / SQLite 自动识别；数据库连接串由连接器插件接入（PostgreSQL / MySQL / SQLite 等）
+- **可选分布式**：执行后端插件（Dask）将批处理与规则验证扇出到本地进程集群或外部集群，核心保持单机轻量
 - **多格式报告**：HTML（含 Plotly 图表）/ JSON / Markdown
 - **可编程**：完整的 Python API，可嵌入 Jupyter Notebook、Airflow DAG 或任何 Python 项目
 
@@ -30,13 +31,19 @@
 ```bash
 # 进入项目目录后执行
 
-# 基础安装
+# 基础安装（轻量, 不含数据库/分布式）
 pip install -e .
+
+# 可选能力按需安装
+pip install -e ".[db]"         # SQL 连接器 (sqlalchemy, SQLite 零驱动可用)
+pip install -e ".[postgres]"   # PostgreSQL 驱动
+pip install -e ".[mysql]"      # MySQL 驱动
+pip install -e ".[dask]"       # Dask 分布式执行后端
 
 # 带开发依赖
 pip install -e ".[dev]"
 
-# 完整安装（含数据库、API、监控、调度）
+# 完整安装（含数据库、分布式、API、监控、调度）
 pip install -e ".[all]"
 ```
 
@@ -63,11 +70,11 @@ dq doctor
 
 | 命令 | 说明 |
 |------|------|
-| `dq profile <file>` | 数据画像 — 字段统计、空值率、分布分析 |
-| `dq auto <file>` | 自动清洗 — 缺失值/重复值/日期/异常值一键修复 |
-| `dq validate <file>` | 规则验证 — YAML 驱动的数据质量规则检查 |
+| `dq profile <file>` | 数据画像 — 字段统计、空值率、分布分析；支持 `--table` / `--query` 连接串取数 |
+| `dq auto <file>` | 自动清洗 — 缺失值/重复值/日期/异常值一键修复；支持 `--table` / `--query` 连接串取数 |
+| `dq validate <file>` | 规则验证 — YAML 驱动的数据质量规则检查；`--distributed` 分区分片并行验证 |
 | `dq semantic <file>` | 语义识别 — 自动识别字段类型（邮箱/电话/日期...） |
-| `dq batch <dir>` | 批量处理 — 并发治理目录中所有数据文件 |
+| `dq batch <dir>` | 批量处理 — 并发治理目录中所有数据文件；`--backend dask` 分布式扇出 |
 | `dq pipeline <file>` | 导出 Pipeline — 生成可重复执行的 Python 清洗脚本 |
 | `dq drift <baseline> <current>` | 漂移检测 — Schema/分布/空值率/分类四种漂移 |
 | `dq monitor <dir>` | 质量监控 — 持续监控目录数据质量变化 |
@@ -89,6 +96,49 @@ dq doctor
 --verbose, -v    # 详细输出
 --help           # 查看命令帮助
 ```
+
+## 数据库源与分布式执行（可选插件）
+
+数据库连接器和分布式执行后端都是**热插拔插件**：依赖按需安装、懒加载，未安装时核心功能完全不受影响。用 `dq plugins` 查看已加载的插件，`dq doctor` 检查可选依赖状态。
+
+### 数据库连接器
+
+```bash
+# 表模式
+dq profile "postgresql://user:pass@host:5432/mydb" --table users
+
+# 查询模式 (优先于 --table; 大结果集请自行加 LIMIT)
+dq validate "mysql://user:pass@host/mydb" \
+    --query "SELECT * FROM orders WHERE dt = '2026-10-31'" \
+    --rules configs/rules.yaml --json
+
+# 表模式限行 (方言无关)
+dq profile "postgresql://..." --table events --limit 100000
+
+# 自动清洗同样支持
+dq auto "sqlite:///warehouse.db" --table users -o cleaned.csv
+```
+
+- 连接串密码在日志中始终脱敏；表名经 SQLAlchemy 元数据反射参数化，无 SQL 拼接注入面
+- 自定义数据源（Kafka、HDFS、S3...）：编写 `BaseConnector` 插件（声明 `SCHEMES`）放入 `plugins/` 目录即可，`DataLoader` 会按 URI scheme 自动路由
+
+### 分布式执行
+
+```bash
+# 批处理文件扇出到本地进程集群 (绕开 GIL)
+dq batch ./datasets --backend dask
+
+# 连接外部 Dask 集群
+DQENGINE_DASK_SCHEDULER="tcp://cluster:8786" dq batch ./datasets --backend dask
+
+# 大文件分区分片验证 (与单机验证结果完全一致, 行号全局对齐)
+dq validate big_table.csv --rules rules.yaml --distributed --npartitions 8
+```
+
+- 4 种规则（range / regex / not_null / allowed_values）均为行级语义，分区分片结果与单机对拍一致；列级违规按规则去重
+- `--distributed` 只在申请违规隔离区时才回读全量数据
+- 清洗（`auto`）不做分布式：去重与异常值阈值依赖全局统计，强做分片会静默出错
+- 外部集群 worker 需能 `import dqengine`，并可通过共享路径访问输入/输出文件
 
 ## Python API
 
@@ -246,6 +296,56 @@ class MyCleaner(BaseCleaner):
             rows_before=len(df), rows_after=len(df_clean),
             columns_affected=1, changes_made=10,
         )
+```
+
+### 连接器（自定义数据源）
+
+声明 `SCHEMES` 后，`dq <命令> "myscheme://..."` 会自动路由到该插件。
+可选依赖一律在方法内懒加载，不要放在模块顶层。
+
+```python
+from typing import Optional
+import pandas as pd
+from dqengine.plugins.base import BaseConnector
+from dqengine.models.schemas import PluginInfo, PluginType
+
+class MyConnector(BaseConnector):
+    PLUGIN_INFO = PluginInfo(
+        name="my_connector",
+        plugin_type=PluginType.LOADER,
+        description="自定义数据源连接器",
+    )
+    SCHEMES = ("myscheme",)
+
+    def load(self, uri, table=None, query=None, **kwargs):
+        return pd.DataFrame({"col": [1, 2]})  # 实际从数据源读取
+```
+
+### 执行后端（自定义分布式）
+
+实现 `map`（任务扇出，保序返回）与 `map_partitions`
+（分区分片，签名 `fn(partition, row_offset)`）两个方法即可接入
+`dq batch --backend` 与 `dq validate --distributed`。
+
+```python
+from typing import Any, Callable, List, Sequence
+from dqengine.plugins.base import BaseBackend
+from dqengine.models.schemas import PluginInfo, PluginType
+
+class MyBackend(BaseBackend):
+    PLUGIN_INFO = PluginInfo(
+        name="my_backend",
+        plugin_type=PluginType.BACKEND,
+        description="自定义执行后端",
+    )
+    NAME = "my_backend"
+
+    def map(self, fn: Callable, items: Sequence[Any]) -> List[Any]:
+        return [fn(x) for x in items]  # 替换为并行/分布式实现
+
+    def map_partitions(self, source, npartitions, fn, merge, **kwargs):
+        parts = ...  # 切分数据源
+        return merge([fn(p, i * len_p) for i, p in enumerate(parts)])
 ```
 
 ```bash

@@ -33,6 +33,13 @@ _global_config_path: Optional[str] = None
 
 logger = get_logger(__name__)
 
+
+def _is_uri(source: str) -> bool:
+    """判断输入是否为数据源连接串 (scheme:// 形式, 由连接器插件处理)."""
+    import re
+
+    return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", source.strip()))
+
 app = typer.Typer(
     name="dq",
     help="DQEngine — AI-Driven Data Quality Platform v3.0",
@@ -118,17 +125,21 @@ def version() -> None:
 
 @app.command()
 def profile(
-    file: str = typer.Argument(..., help="数据文件路径 (CSV/Excel/JSON/Parquet)"),
+    file: str = typer.Argument(..., help="数据文件路径或数据库连接串 (如 postgresql://...)"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="保存画像为 JSON"),
+    table: Optional[str] = typer.Option(None, "--table", help="数据库表名 (连接串模式)"),
+    query: Optional[str] = typer.Option(None, "--query", help="SQL 查询 (连接串模式, 优先于 --table)"),
 ) -> None:
     """分析数据集并显示字段统计信息."""
     path = Path(file)
-    if not path.exists():
+    source_is_uri = _is_uri(file)
+    if not source_is_uri and not path.exists():
         print_error(f"文件未找到: {file}")
         raise typer.Exit(code=1)
 
     console.print()
-    console.print(Panel.fit(f"[bold]数据分析:[/bold] {path.name}", border_style="cyan"))
+    display_name = file.strip() if source_is_uri else path.name
+    console.print(Panel.fit(f"[bold]数据分析:[/bold] {display_name}", border_style="cyan"))
 
     from dqengine.core.loader import DataLoader
     from dqengine.core.profiler import Profiler
@@ -139,12 +150,12 @@ def profile(
     scorer = QualityScorer()
 
     try:
-        df = loader.load(path)
+        df = loader.load(file if source_is_uri else path, table_name=table, query=query)
     except Exception as e:
-        print_error(f"加载文件失败: {e}")
+        print_error(f"加载失败: {e}")
         raise typer.Exit(code=1)
 
-    profile_result = profiler.profile(df, file_path=str(path))
+    profile_result = profiler.profile(df, file_path=display_name)
     quality_score = scorer.score(df, profile_result)
 
     # 概览表
@@ -200,7 +211,7 @@ def profile(
 
 @app.command()
 def auto(
-    file: str = typer.Argument(..., help="数据文件路径 (CSV/Excel/JSON/Parquet)"),
+    file: str = typer.Argument(..., help="数据文件路径或数据库连接串"),
     output: str = typer.Option("cleaned_data.csv", "--output", "-o", help="输出文件路径"),
     report: str = typer.Option("report.html", "--report", "-r", help="报告输出路径"),
     config: Optional[str] = typer.Option(None, "--config", "-c", help="配置文件路径"),
@@ -208,10 +219,13 @@ def auto(
     fail_below_score: Optional[float] = typer.Option(
         None, "--fail-below-score", help="质量门禁: 清洗后评分低于该值时以非零码退出 (CI 用)"
     ),
+    table: Optional[str] = typer.Option(None, "--table", help="数据库表名 (连接串模式)"),
+    query: Optional[str] = typer.Option(None, "--query", help="SQL 查询 (连接串模式, 优先于 --table)"),
 ) -> None:
     """自动检测并修复数据质量问题: 空值、重复、日期、异常值."""
     path = Path(file)
-    if not path.exists():
+    source_is_uri = _is_uri(file)
+    if not source_is_uri and not path.exists():
         print_error(f"文件未找到: {file}")
         raise typer.Exit(code=1)
 
@@ -229,7 +243,8 @@ def auto(
         app_config.cleaning.outlier.enabled = False
 
     console.print()
-    console.print(Panel.fit(f"[bold]自动清洗:[/bold] {path.name}", border_style="cyan"))
+    display_name = file.strip() if source_is_uri else path.name
+    console.print(Panel.fit(f"[bold]自动清洗:[/bold] {display_name}", border_style="cyan"))
 
     # 使用编排器
     from dqengine.services.orchestrator import CleaningOrchestrator
@@ -245,6 +260,8 @@ def auto(
             file_path=file,
             output_path=output,
             report_path=report,
+            table_name=table,
+            query=query,
         )
 
         progress.update(task, completed=True, description="[green]清洗完成!")
@@ -271,19 +288,28 @@ def auto(
 
 @app.command()
 def validate(
-    file: str = typer.Argument(..., help="数据文件路径"),
+    file: str = typer.Argument(..., help="数据文件路径或数据库连接串"),
     rules: str = typer.Option(..., "--rules", "-r", help="YAML 规则文件路径"),
     quarantine: Optional[str] = typer.Option(
         None, "--quarantine", "-q", help="违规行隔离输出路径 (CSV, 附加违规摘要列)"
     ),
     json_output: bool = typer.Option(False, "--json", help="输出机器可读 JSON (供 CI 解析, 不渲染表格)"),
+    distributed: bool = typer.Option(
+        False, "--distributed", help="分区分片并行验证 (大文件用, 需执行后端插件)"
+    ),
+    npartitions: int = typer.Option(0, "--npartitions", help="分布式分区数 (缺省按文件大小自动)"),
+    backend: Optional[str] = typer.Option(None, "--backend", help="执行后端插件名 (缺省 dask)"),
 ) -> None:
     """根据 YAML 规则验证数据."""
     path = Path(file)
     rules_path = Path(rules)
+    source_is_uri = _is_uri(file)
 
-    if not path.exists():
+    if not source_is_uri and not path.exists():
         print_error(f"文件未找到: {file}")
+        raise typer.Exit(code=1)
+    if source_is_uri and distributed:
+        print_error("分布式模式暂不支持数据库源, 请先导出为 CSV/Parquet 再验证")
         raise typer.Exit(code=1)
     if not rules_path.exists():
         print_error(f"规则文件未找到: {rules}")
@@ -293,7 +319,9 @@ def validate(
         console.print()
         console.print(
             Panel.fit(
-                f"[bold]规则验证:[/bold] {path.name}  [dim]检测规则[/dim]  [bold]{rules_path.name}[/bold]",
+                f"[bold]规则验证:[/bold] {file.strip() if source_is_uri else path.name}  "
+                f"[dim]检测规则[/dim]  [bold]{rules_path.name}[/bold]"
+                + ("  [dim](分布式)[/dim]" if distributed else ""),
                 border_style="cyan",
             )
         )
@@ -303,17 +331,63 @@ def validate(
 
     loader = DataLoader()
     validator = RuleValidator()
+    df = None
 
-    try:
-        df = loader.load(path)
-    except Exception as e:
-        print_error(f"加载文件失败: {e}")
-        raise typer.Exit(code=1)
+    if distributed:
+        # 分区分片: 各分区在 worker 上验证后合并, 主进程不整表加载
+        # (申请隔离区时才回读全量数据用于导出违规行)
+        import functools
 
-    result = validator.validate(df, rules)
+        from dqengine.distributed.parallel import (
+            merge_validation_results,
+            validate_partition,
+        )
+        from dqengine.plugins.discovery import find_backend, list_available_backends
+
+        backend_name = (backend or "dask").strip().lower()
+        backend_plugin = find_backend(backend_name)
+        if backend_plugin is None:
+            print_error(
+                f"未找到执行后端插件: {backend_name!r} "
+                f"(可用: {list_available_backends() or '无, 请检查可选依赖是否安装'})"
+            )
+            raise typer.Exit(code=1)
+
+        try:
+            rules_list = validator.load_rules(rules_path)
+        except Exception as e:
+            print_error(f"规则文件解析失败: {e}")
+            raise typer.Exit(code=1)
+
+        worker = functools.partial(validate_partition, rules=rules_list)
+        merger = functools.partial(merge_validation_results, total_rules=len(rules_list))
+        try:
+            result = backend_plugin.map_partitions(
+                file, npartitions, worker, merger
+            )
+        except ImportError as e:
+            print_error(str(e))
+            raise typer.Exit(code=1)
+        except Exception as e:
+            print_error(f"分布式验证失败: {e}")
+            raise typer.Exit(code=1)
+    else:
+        try:
+            df = loader.load(file if source_is_uri else path, table_name=None, query=None)
+        except Exception as e:
+            print_error(f"加载失败: {e}")
+            raise typer.Exit(code=1)
+
+        result = validator.validate(df, rules)
 
     # 违规行隔离 (json 模式下同样生效, 消息走日志不渲染表格)
     if quarantine and result.violations:
+        if df is None:
+            try:
+                df = loader.load(file)
+            except Exception as e:
+                print_error(f"隔离区回读数据失败: {e}")
+                raise typer.Exit(code=1)
         # 违规行隔离: 按行位置去重后导出, 附加违规摘要列
         row_msgs: dict = {}
         column_level = 0
@@ -473,6 +547,9 @@ def batch(
     output_dir: str = typer.Option("batch_output", "--output", "-o", help="输出目录"),
     config: Optional[str] = typer.Option(None, "--config", "-c", help="配置文件路径"),
     workers: int = typer.Option(4, "--workers", "-w", help="并发处理数"),
+    backend: Optional[str] = typer.Option(
+        None, "--backend", help="分布式执行后端插件名 (如 dask, 需安装 dqengine[dask])"
+    ),
 ) -> None:
     """批量处理目录中的所有数据文件.
 
@@ -482,6 +559,7 @@ def batch(
     示例:
         dq batch ./datasets
         dq batch ./datasets -o ./results -w 8
+        dq batch ./datasets --backend dask
     """
     dir_path = Path(directory)
     if not dir_path.exists():
@@ -506,7 +584,11 @@ def batch(
 
     from dqengine.batch import BatchProcessor
     processor = BatchProcessor(config=app_config, max_workers=workers)
-    summary = processor.process(directory, output_dir=output_dir)
+    try:
+        summary = processor.process(directory, output_dir=output_dir, backend=backend)
+    except ValueError as e:
+        print_error(str(e))
+        raise typer.Exit(code=1)
 
     # 显示汇总
     console.print()
@@ -601,14 +683,18 @@ def pipeline(
 
 @app.command()
 def plugins(
-    plugin_type: Optional[str] = typer.Option(None, "--type", "-t", help="插件类型: validator, cleaner, scorer"),
+    plugin_type: Optional[str] = typer.Option(
+        None, "--type", "-t", help="插件类型: validator, cleaner, scorer, loader, backend"
+    ),
 ) -> None:
     """列出所有已加载的插件.
 
     示例:
         dq plugins
         dq plugins --type validator
+        dq plugins --type backend
     """
+    from dqengine.plugins.discovery import BUILTIN_PLUGINS_DIR
     from dqengine.registry.plugin_registry import get_plugin_registry
 
     console.print()
@@ -616,7 +702,8 @@ def plugins(
 
     registry = get_plugin_registry()
 
-    # 自动发现 plugins/ 目录下的插件
+    # 内置插件 (连接器/执行后端) 与用户 plugins/ 目录都纳入发现
+    registry.discover(BUILTIN_PLUGINS_DIR)
     plugins_dir = Path("plugins")
     if not plugins_dir.exists():
         plugins_dir = Path(__file__).parent.parent / "plugins"
@@ -698,13 +785,28 @@ def doctor() -> None:
             deps[dep] = f"[red]未安装[/red] ({desc})"
             issues.append(f"缺少依赖: {dep} ({desc})")
 
-    # 检查插件
+    # 可选依赖 (连接器/分布式插件能力): 缺失不算问题, 只作提示
+    optional_deps = {
+        "sqlalchemy": ("SQL 连接器", 'pip install "dqengine[db]"'),
+        "dask": ("Dask 分布式后端", 'pip install "dqengine[dask]"'),
+        "distributed": ("Dask 集群调度", 'pip install "dqengine[dask]"'),
+    }
+    for dep, (desc, hint) in optional_deps.items():
+        try:
+            mod = __import__(dep)
+            version = getattr(mod, "__version__", "已安装")
+            deps[f"{dep} (可选)"] = f"[green]{version}[/green] ({desc})"
+        except ImportError:
+            deps[f"{dep} (可选)"] = f"[yellow]未安装[/yellow] ({desc}; {hint})"
+
+    # 检查插件 (内置 + 用户目录)
+    from dqengine.plugins.discovery import BUILTIN_PLUGINS_DIR
     from dqengine.registry.plugin_registry import get_plugin_registry
     registry = get_plugin_registry()
     plugins_dir = Path("plugins")
     if not plugins_dir.exists():
         plugins_dir = Path(__file__).parent.parent / "plugins"
-    loaded_plugins = registry.discover(plugins_dir)
+    loaded_plugins = registry.discover(plugins_dir) + registry.discover(BUILTIN_PLUGINS_DIR)
     [p.name for p in loaded_plugins]
 
     # 检查配置文件

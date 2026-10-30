@@ -113,6 +113,7 @@ class BatchProcessor:
         directory: "str | Path",
         output_dir: "str | Path" = "batch_output",
         use_parallel: bool = True,
+        backend: Optional[str] = None,
     ) -> BatchSummary:
         """执行批量处理.
 
@@ -120,6 +121,10 @@ class BatchProcessor:
             directory: 数据目录.
             output_dir: 输出目录.
             use_parallel: 是否使用并发处理.
+            backend: 分布式执行后端插件名 (如 dask); 提供时忽略
+                use_parallel, 文件任务扇出给后端执行. 注意分布式
+                worker 端需能 import dqengine, 且共享文件系统或
+                可访问相同路径.
 
         Returns:
             BatchSummary 汇总结果.
@@ -163,7 +168,9 @@ class BatchProcessor:
 
         results: List[BatchFileResult] = []
 
-        if use_parallel and len(files) > 1:
+        if backend:
+            results = self._process_distributed(files, out_dir, name_map, backend)
+        elif use_parallel and len(files) > 1:
             results = self._process_parallel(files, out_dir, name_map)
         else:
             results = self._process_sequential(files, out_dir, name_map)
@@ -223,6 +230,44 @@ class BatchProcessor:
                 pbar.update(1)
 
         return results
+
+    def _process_distributed(
+        self, files: List[Path], out_dir: Path, name_map: dict, backend_name: str
+    ) -> List[BatchFileResult]:
+        """后端插件扇出处理文件 (分布式/进程级并行).
+
+        任务为 (源文件, 输出目录, 输出名, 配置) 元组, worker 端
+        自行构建处理器; 后端保证结果按输入顺序返回.
+
+        Args:
+            files: 文件列表.
+            out_dir: 输出目录.
+            name_map: 源文件 -> 输出文件名.
+            backend_name: 后端插件名 (如 dask).
+
+        Returns:
+            处理结果列表 (按输入文件顺序).
+
+        Raises:
+            ValueError: 后端插件不存在.
+        """
+        from dqengine.distributed.parallel import batch_task_adapter
+        from dqengine.plugins.discovery import find_backend, list_available_backends
+
+        backend_plugin = find_backend(backend_name)
+        if backend_plugin is None:
+            available = list_available_backends()
+            raise ValueError(
+                f"未找到执行后端插件: {backend_name!r} (可用: {available or '无, 请检查可选依赖是否安装'})"
+            )
+
+        tasks = [
+            (str(f), str(out_dir), name_map.get(f) or f"cleaned_{f.stem}.csv", self.config)
+            for f in files
+        ]
+        results = backend_plugin.map(batch_task_adapter, tasks)
+        logger.info("分布式批处理完成: %d 个文件 (后端: %s)", len(results), backend_plugin.name)
+        return list(results)
 
     def _process_parallel(
         self, files: List[Path], out_dir: Path, name_map: dict
