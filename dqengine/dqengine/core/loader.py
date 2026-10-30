@@ -1,7 +1,8 @@
-"""数据加载模块 - 支持 CSV / Excel / JSON / Parquet / SQLite."""
+"""数据加载模块 - 支持 CSV / Excel / JSON / Parquet / SQLite 及连接器插件数据源."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,9 @@ import pandas as pd
 from dqengine.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# 形如 scheme://... 的数据源 URI (排除 Windows 盘符路径等普通字符串)
+_URI_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://")
 
 
 class DataLoader:
@@ -20,11 +24,13 @@ class DataLoader:
         - Excel (.xlsx, .xls)
         - JSON (.json)
         - Parquet (.parquet)
-        - SQLite (.db, .sqlite, .sqlite3) — 需 sqlalchemy
+        - SQLite (.db, .sqlite, .sqlite3)
+        - 数据库连接串 (postgresql:// 等) — 由连接器插件处理, 需安装对应依赖
 
     使用方式:
         loader = DataLoader()
         df = loader.load("data.csv")
+        df = loader.load("postgresql://user:pass@host/db", table_name="users")
     """
 
     # gb2312 是 gbk 的子集, gbk 失败后 gb2312 必失败, 不重复尝试;
@@ -36,22 +42,41 @@ class DataLoader:
         self,
         file_path: "str | Path",
         table_name: Optional[str] = None,
+        query: Optional[str] = None,
         **kwargs,
     ) -> pd.DataFrame:
-        """加载文件到 DataFrame.
+        """加载文件或数据源到 DataFrame.
 
         Args:
-            file_path: 文件路径.
-            table_name: 对于数据库文件, 指定表名.
-            **kwargs: 传递给底层 pandas 读取函数的额外参数.
+            file_path: 文件路径, 或数据源连接串 (scheme:// 形式,
+                按 scheme 路由到连接器插件).
+            table_name: 对于数据库, 指定表名.
+            query: 对于数据库, 指定 SQL 查询 (优先于 table_name).
+            **kwargs: 传递给底层读取函数的额外参数.
 
         Returns:
             DataFrame.
 
         Raises:
             FileNotFoundError: 文件不存在.
-            ValueError: 不支持的格式.
+            ValueError: 不支持的格式, 或无匹配的连接器插件.
         """
+        if isinstance(file_path, str) and _URI_PATTERN.match(file_path.strip()):
+            from dqengine.plugins.discovery import find_connector
+
+            uri = file_path.strip()
+            connector = find_connector(uri)
+            if connector is None:
+                scheme = uri.split("://", 1)[0]
+                raise ValueError(
+                    f"没有支持 {scheme}:// 的连接器插件. "
+                    '内置 SQL 连接器需安装 sqlalchemy: pip install "dqengine[db]" '
+                    "(PostgreSQL/MySQL 驱动: dqengine[postgres] / dqengine[mysql]); "
+                    "或编写自定义连接器插件放入 plugins/ 目录"
+                )
+            logger.info("通过连接器插件 %s 加载: %s", connector.name, uri)
+            return connector.load(uri, table=table_name, query=query, **kwargs)
+
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"文件未找到: {path}")

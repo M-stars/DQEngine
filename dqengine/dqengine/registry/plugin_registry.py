@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import inspect
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
@@ -108,7 +109,8 @@ class PluginRegistry:
 
         # 查找插件信息: 模块级 PLUGIN_INFO, 或模块内**自定义**该属性的类
         # (继承自基类的 PLUGIN_INFO 不算 —— 否则任何只 import 了基类的
-        #  文件都会注册成幽灵插件, 甚至改写共享的基类属性)
+        #  文件都会注册成幽灵插件, 甚至改写共享的基类属性);
+        # 抽象基类 (含 @abstractmethod 的 Base* 类) 同样不注册
         plugin_info = getattr(module, "PLUGIN_INFO", None)
         if not isinstance(plugin_info, PluginInfo):
             for attr_name in dir(module):
@@ -116,6 +118,7 @@ class PluginRegistry:
                 if (
                     isinstance(attr, type)
                     and attr.__module__ == module_name
+                    and not inspect.isabstract(attr)
                     and attr.__dict__.get("PLUGIN_INFO") is not None
                 ):
                     plugin_info = attr.PLUGIN_INFO

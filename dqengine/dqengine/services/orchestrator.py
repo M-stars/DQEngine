@@ -72,24 +72,33 @@ class CleaningOrchestrator:
         output_path: "str | Path" = "cleaned_data.csv",
         report_path: "str | Path" = "report.html",
         rules_path: Optional["str | Path"] = None,
+        table_name: Optional[str] = None,
+        query: Optional[str] = None,
     ) -> dict:
         """执行完整的数据清洗流程.
 
         Args:
-            file_path: 输入文件路径.
+            file_path: 输入文件路径或数据源连接串 (scheme:// 形式).
             output_path: 清洗后数据输出路径.
             report_path: 报告输出路径.
             rules_path: 可选的验证规则文件路径.
+            table_name: 数据库源表名 (连接串模式).
+            query: 数据库源 SQL 查询 (连接串模式, 优先于表名).
 
         Returns:
             包含清洗结果的字典.
         """
-        path = Path(file_path)
+        # URI 连接串不作 Path 化 (会生成非法路径对象), 直接作显示名
+        path = (
+            file_path
+            if isinstance(file_path, str) and "://" in file_path
+            else Path(file_path)
+        )
         cleaning = self.config.cleaning
 
         # Step 1: 数据加载
-        logger.info("Step 1: 加载数据 %s", path.name)
-        df = self.loader.load(path)
+        logger.info("Step 1: 加载数据 %s", file_path)
+        df = self.loader.load(file_path, table_name=table_name, query=query)
         original_rows = len(df)
         repairs: List[RepairResult] = []
 

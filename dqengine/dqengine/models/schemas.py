@@ -242,6 +242,7 @@ class PluginType(str, Enum):
     SCORER = "scorer"
     LOADER = "loader"
     REPORTER = "reporter"
+    BACKEND = "backend"
 
 
 class PluginInfo(BaseModel):
