@@ -35,15 +35,19 @@
 pip install -e .
 
 # 可选能力按需安装
-pip install -e ".[db]"         # SQL 连接器 (sqlalchemy, SQLite 零驱动可用)
-pip install -e ".[postgres]"   # PostgreSQL 驱动
-pip install -e ".[mysql]"      # MySQL 驱动
-pip install -e ".[dask]"       # Dask 分布式执行后端
+pip install -e ".[db]"          # SQL 连接器 (sqlalchemy, SQLite 零驱动可用)
+pip install -e ".[postgres]"    # PostgreSQL 驱动
+pip install -e ".[mysql]"       # MySQL / MariaDB 驱动
+pip install -e ".[clickhouse]"  # ClickHouse 方言
+pip install -e ".[hive]"        # Hive / Spark(Thrift Server) / Presto / Trino 方言
+pip install -e ".[mongo]"       # MongoDB 连接器
+pip install -e ".[kafka]"       # Kafka 连接器
+pip install -e ".[dask]"        # Dask 分布式执行后端
 
 # 带开发依赖
 pip install -e ".[dev]"
 
-# 完整安装（含数据库、分布式、API、监控、调度）
+# 完整安装（含全部数据源、分布式、API、监控、调度）
 pip install -e ".[all]"
 ```
 
@@ -103,24 +107,42 @@ dq doctor
 
 ### 数据库连接器
 
-```bash
-# 表模式
-dq profile "postgresql://user:pass@host:5432/mydb" --table users
+| 数据源 | scheme | extra | 取数语义 |
+|--------|--------|-------|----------|
+| PostgreSQL | `postgresql://` | `postgres` | 表 / SQL 查询 |
+| MySQL / MariaDB | `mysql://` | `mysql` | 表 / SQL 查询 |
+| ClickHouse | `clickhouse://` / `clickhousedb://` | `clickhouse` | 表 / SQL 查询 |
+| Hive / Spark(Thrift) | `hive://` / `spark://` | `hive` | 表 / SQL 查询 |
+| Presto / Trino | `presto://` / `trino://` | —（自装 PyHive / trino） | 表 / SQL 查询 |
+| SQLite | `sqlite:///` | 无需驱动 | 表 / SQL 查询 |
+| MongoDB | `mongodb://` | `mongo` | collection + JSON 过滤 |
+| Kafka | `kafka://broker/topic` | `kafka` | 消费 topic 消息 |
 
-# 查询模式 (优先于 --table; 大结果集请自行加 LIMIT)
+```bash
+# SQL 库: 表模式 / 查询模式 (优先于 --table; 大结果集请自行加 LIMIT)
+dq profile "postgresql://user:pass@host:5432/mydb" --table users
 dq validate "mysql://user:pass@host/mydb" \
     --query "SELECT * FROM orders WHERE dt = '2026-10-31'" \
     --rules configs/rules.yaml --json
-
-# 表模式限行 (方言无关)
 dq profile "postgresql://..." --table events --limit 100000
+
+# ClickHouse / Hive 同一套用法
+dq profile "clickhouse://user:pass@host:8123/ods" --table events
+dq profile "hive://nn:10000/ods" --table dwd_orders
+
+# MongoDB: --table = collection, --query = JSON 过滤条件 (嵌套文档自动展平)
+dq profile "mongodb://user:pass@host:27017/appdb" --table users --query '{"age": {"$gt": 18}}'
+
+# Kafka: 消费 topic 至多 --limit 条消息 (缺省 1000, JSON 展平/原文入 value 列)
+dq profile "kafka://broker1:9092,broker2:9092/orders" --limit 5000
 
 # 自动清洗同样支持
 dq auto "sqlite:///warehouse.db" --table users -o cleaned.csv
 ```
 
-- 连接串密码在日志中始终脱敏；表名经 SQLAlchemy 元数据反射参数化，无 SQL 拼接注入面
-- 自定义数据源（Kafka、HDFS、S3...）：编写 `BaseConnector` 插件（声明 `SCHEMES`）放入 `plugins/` 目录即可，`DataLoader` 会按 URI scheme 自动路由
+- 连接串密码在日志中始终脱敏；SQL 表名经 SQLAlchemy 元数据反射参数化，无拼接注入面
+- Kafka 取数是数据质量检查视角（近期消息画像/验证），不是全量回放工具
+- 自定义数据源（HDFS、S3...）：编写 `BaseConnector` 插件（声明 `SCHEMES`）放入 `plugins/` 目录即可，`DataLoader` 会按 URI scheme 自动路由
 
 ### 分布式执行
 

@@ -67,6 +67,19 @@ mysql = [
     "sqlalchemy>=2.0.0",
     "pymysql>=1.1",
 ]
+clickhouse = [
+    "clickhouse-sqlalchemy>=0.3.2",
+]
+hive = [
+    "pyhive[hive]>=0.7.0",
+    "pure-sasl>=0.6.2",
+]
+mongo = [
+    "pymongo>=4.6",
+]
+kafka = [
+    "kafka-python>=3.0.0",
+]
 dask = [
     "dask[dataframe]>=2024.1.0",
     "distributed>=2024.1.0",
@@ -94,6 +107,11 @@ all = [
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9",
     "pymysql>=1.1",
+    "clickhouse-sqlalchemy>=0.3.2",
+    "pyhive[hive]>=0.7.0",
+    "pure-sasl>=0.6.2",
+    "pymongo>=4.6",
+    "kafka-python>=3.0.0",
     "dask[dataframe]>=2024.1.0",
     "distributed>=2024.1.0",
     "scipy>=1.11.0",

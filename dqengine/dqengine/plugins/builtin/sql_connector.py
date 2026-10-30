@@ -18,11 +18,17 @@ logger = get_logger(__name__)
 
 
 class SqlConnector(BaseConnector):
-    """通用 SQL 连接器 — 通过 sqlalchemy 接入 PostgreSQL/MySQL/SQLite 等.
+    """通用 SQL 连接器 — 通过 sqlalchemy 接入关系库与 SQL 方言数据库.
 
     用法:
         - 表模式: ``dq profile postgresql://user:pass@host:5432/db --table users``
         - 查询模式: ``dq profile postgresql://... --query "SELECT ..."``
+
+    方言依赖 (缺省时报错会提示安装方式):
+        - PostgreSQL: dqengine[postgres] / MySQL: dqengine[mysql]
+        - ClickHouse: clickhouse-sqlalchemy (clickhouse://) 或官方
+          clickhouse-connect (clickhousedb://)
+        - Hive / Spark(Thrift Server) / Presto / Trino: PyHive
 
     取数只读 (SELECT), 不向数据源写入任何内容.
     """
@@ -30,12 +36,35 @@ class SqlConnector(BaseConnector):
     PLUGIN_INFO = PluginInfo(
         name="sql_connector",
         plugin_type=PluginType.LOADER,
-        version="0.1.0",
-        description="SQL 数据库连接器 (postgresql/mysql/sqlite/mssql/oracle), 依赖 sqlalchemy",
+        version="0.2.0",
+        description=(
+            "SQL 数据库连接器 (postgresql/mysql/clickhouse/hive/spark/"
+            "presto/trino/sqlite/mssql/oracle), 依赖 sqlalchemy"
+        ),
         dependencies=["sqlalchemy"],
     )
 
-    SCHEMES = ("postgresql", "postgres", "mysql", "mariadb", "sqlite", "mssql", "oracle")
+    SCHEMES = (
+        "postgresql", "postgres", "mysql", "mariadb", "sqlite",
+        "mssql", "oracle", "clickhouse", "clickhousedb",
+        "hive", "spark", "presto", "trino",
+    )
+
+    # scheme -> 缺失方言/驱动时的安装提示
+    DRIVER_HINTS = {
+        "postgresql": 'pip install "dqengine[postgres]"',
+        "postgres": 'pip install "dqengine[postgres]"',
+        "mysql": 'pip install "dqengine[mysql]"',
+        "mariadb": 'pip install "dqengine[mysql]"',
+        "clickhouse": "pip install clickhouse-sqlalchemy",
+        "clickhousedb": "pip install clickhouse-connect",
+        "hive": 'pip install "dqengine[hive]"',
+        "spark": 'pip install "dqengine[hive]" (Spark Thrift Server 兼容 Hive 协议)',
+        "presto": "pip install pyhive[presto]",
+        "trino": "pip install trino[sqlalchemy]",
+        "mssql": "pip install pyodbc",
+        "oracle": "pip install oracledb",
+    }
 
     def load(
         self,
@@ -63,6 +92,7 @@ class SqlConnector(BaseConnector):
         try:
             from sqlalchemy import MetaData, Table, create_engine, select, text
             from sqlalchemy.engine import make_url
+            from sqlalchemy.exc import NoSuchModuleError
         except ImportError:
             raise ImportError(
                 'SQL 连接器需要 sqlalchemy: pip install "dqengine[db]" '
@@ -75,12 +105,19 @@ class SqlConnector(BaseConnector):
         except Exception:
             safe_uri = "<无法解析的连接串>"
 
+        scheme = uri.split("://", 1)[0].lower()
         limit = kwargs.pop("limit", None)
         if not query and not table:
             raise ValueError(f"数据源 {safe_uri} 未指定表名或查询, 请通过 --table / --query 提供")
 
         logger.info("数据库连接: %s (模式: %s)", safe_uri, "查询" if query else f"表 {table}")
-        engine = create_engine(uri)
+        try:
+            engine = create_engine(uri)
+        except (NoSuchModuleError, ModuleNotFoundError):
+            hint = self.DRIVER_HINTS.get(scheme, "安装对应 sqlalchemy 方言包")
+            raise ImportError(
+                f"数据库方言 {scheme}:// 不可用 (缺少驱动/方言包). 安装: {hint}"
+            )
         try:
             if query is not None:
                 if limit is not None:

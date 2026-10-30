@@ -788,6 +788,10 @@ def doctor() -> None:
     # 可选依赖 (连接器/分布式插件能力): 缺失不算问题, 只作提示
     optional_deps = {
         "sqlalchemy": ("SQL 连接器", 'pip install "dqengine[db]"'),
+        "clickhouse_sqlalchemy": ("ClickHouse 方言", 'pip install "dqengine[clickhouse]"'),
+        "pyhive": ("Hive/Spark(Thrift) 方言", 'pip install "dqengine[hive]"'),
+        "pymongo": ("MongoDB 连接器", 'pip install "dqengine[mongo]"'),
+        "kafka": ("Kafka 连接器", 'pip install "dqengine[kafka]"'),
         "dask": ("Dask 分布式后端", 'pip install "dqengine[dask]"'),
         "distributed": ("Dask 集群调度", 'pip install "dqengine[dask]"'),
     }

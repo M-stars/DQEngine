@@ -10,8 +10,16 @@
 - 插件体系新增两类基类：`BaseConnector`（数据源连接器，按 URI scheme 路由）与
   `BaseBackend`（分布式执行后端）；`PluginType` 新增 `backend` 类型
 - 内置 SQL 连接器插件（`sql_connector`，需 `dqengine[db]`）：PostgreSQL / MySQL /
-  SQLite / SQL Server / Oracle，支持表模式（`--table`，可选 `--limit`，方言无关）与
-  查询模式（`--query`）；连接串密码全程脱敏，表名经元数据反射参数化
+  SQLite / SQL Server / Oracle / ClickHouse / Hive / Spark(Thrift Server) /
+  Presto / Trino，支持表模式（`--table`，可选 `--limit`，方言无关）与查询模式
+  （`--query`）；连接串密码全程脱敏，表名经元数据反射参数化；缺方言/驱动时
+  报错附安装提示
+- 内置 MongoDB 连接器插件（`mongo_connector`，需 `dqengine[mongo]`）：
+  `--table` = collection，`--query` = JSON 过滤条件，嵌套文档 json_normalize
+  展平，ObjectId 统一字符串化
+- 内置 Kafka 连接器插件（`kafka_connector`，需 `dqengine[kafka]`）：
+  `kafka://broker[,broker2]/topic` 消费至多 `--limit` 条消息（缺省 1000，
+  可配 timeout/offset），JSON 消息展平、非 JSON 消息入 `value` 原文列
 - `DataLoader` 按 URI scheme 自动路由连接器插件：`profile` / `auto` / `validate`
   直接支持数据库连接串取数；`CleanOrchestrator` 透传 `table_name` / `query`
 - 内置 Dask 执行后端插件（`dask_backend`，需 `dqengine[dask]`）：未配置调度器时
@@ -21,13 +29,15 @@
 - `dq validate --distributed --npartitions N`：大文件分区分片验证；4 种行级规则
   分区结果与单机对拍完全一致（行号全局对齐），列级违规按规则去重；仅在申请
   违规隔离区时回读全量数据
-- 新 extras：`postgres` / `mysql` / `dask`（均入 `all`）；`dq doctor` 增加可选依赖
-  检测；`dq plugins` 支持展示连接器/后端类型
+- 新 extras：`postgres` / `mysql` / `clickhouse` / `hive` / `mongo` / `kafka` /
+  `dask`（均入 `all`）；`dq doctor` 增加可选依赖检测；`dq plugins` 支持展示
+  连接器/后端类型
 - 插件发现助手 `plugins/discovery.py`：内置插件目录 + 用户 `plugins/` 目录统一
   扫描（线程安全、进程内一次），连接器缓存实例化
 - 注册中心修复遗留幽灵注册：抽象基类（含 @abstractmethod 的 Base* 类）不再被
   注册为插件（此前 `dq plugins` 会显示 base_validator / base_cleaner 等幽灵条目）
-- 新增 tests/test_db.py、tests/test_distributed.py（23 例，含分布式与单机对拍）
+- 新增 tests/test_db.py、tests/test_distributed.py、tests/test_connectors.py
+  （48 例，含分布式与单机对拍、多 scheme 路由、消息解码）
 
 ### 生产化
 - API 服务支持可选 Key 鉴权（环境变量 `DQENGINE_API_KEY`），豁免健康检查/文档/指标端点
