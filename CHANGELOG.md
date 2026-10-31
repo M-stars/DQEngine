@@ -4,7 +4,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.1.0] - 2026-11-01
 
 ### 新增：LLM 集成（自然语言驱动的数据质量治理）
 - LLM Provider 层（`dqengine/ai/llm.py`，纯标准库 urllib 零新依赖）：
@@ -27,6 +27,33 @@
 - 新增 tests/test_llm.py（52 例，全 mock 不联网）：Provider 请求构造与错误映射、
   JSON 提取容错、规则白名单/clamp、NL 规则经 RuleValidator 回环验证（含假通过
   回归）、CLI 全命令
+
+### 测试：v1.0.0 P0 修复的回归兜底（新增 74 例，全量 340 例）
+- tests/test_api.py（17 例）：/profile /validate /clean /semantic /drift /report
+  六个业务端点、坏文件 400、规则 YAML 语法 400、rules_path 目录穿越拦截、
+  编排器尊重 outlier.enabled=false
+- tests/test_cli.py（18 例）：profile/auto/validate/semantic/drift/batch/plugins/
+  doctor/pipeline 十命令 CliRunner 路径；生成 Pipeline 脚本必须可编译
+- tests/test_repair.py（21 例）：日期标准化不毁数值列/不清空合法值、nullable
+  Int64 填充、重复索引异常值不误删、threshold<=0 拒绝
+- tests/test_report.py（8 例）：HTML/JSON/Markdown 三格式、用户列名 XSS 转义
+- tests/test_scheduler_monitor.py（10 例）：CRON/INTERVAL/WATCH 调度语义、
+  croniter 缺失退化、监控回调/坏文件不崩/趋势往返
+- tests/test_config.py、tests/test_integration.py 补漏断言
+
+### 修复
+- 异常值检测零 IQR 漏检：常量列（如全 0 计数列）混入偏离值时 0 检出，
+  现在以常量值为界正确检出
+- 空文件报错友好化：CSV 空文件由 pandas EmptyDataError 堆栈转为明确中文
+  提示；auto/drift 命令加载失败统一 print_error 包装，不再冒 traceback
+
+### 工程化
+- 全仓 ruff 清零（22 处历史遗留：unused imports/变量、f-string 无占位符）
+- pyproject classifier 升为 Production/Stable；black/ruff/mypy 工具链 target
+  从 py311 对齐到 requires-python >=3.9
+- Makefile 镜像标签、telemetry 过时 docstring 修正
+- 顶层 README 过时项修正（血缘/Docker/Spark/LLM 已实现勾选、失效的 docs
+  引用、configs 清单）
 
 ## [1.0.0] - 2026-10-31
 

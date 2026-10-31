@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dqengine"
-version = "1.0.0"
+version = "1.1.0"
 description = "A lightweight, automated, developer-friendly data quality governance framework"
 readme = "README.md"
 license = {text = "MIT"}
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["data-quality", "data-governance", "data-profiling", "data-cleaning", "cli", "semantic", "pipeline"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
@@ -130,18 +130,18 @@ include = ["dqengine*"]
 
 [tool.black]
 line-length = 100
-target-version = ["py311"]
+target-version = ["py39"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py39"
 
 [tool.isort]
 profile = "black"
 line_length = 100
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.9"
 strict = false
 ignore_missing_imports = true
 

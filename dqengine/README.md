@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python 3.9+">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version 1.0.0">
+  <img src="https://img.shields.io/badge/version-1.1.0-blue.svg" alt="Version 1.0.0">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/status-active-brightgreen.svg" alt="Status: Active">
 </p>
@@ -335,7 +335,7 @@ docker-compose up -d
 - [x] 可观测性系统
 - [x] 企业级架构 (Domain/Application/Infrastructure)
 
-### v1.1.0 — LLM Integration (进行中)
+### v1.1.0 (当前) — LLM Integration
 - [x] OpenAI/Ollama Provider 完整实现 (任意 OpenAI 兼容端点经 `--base-url` 接入, 纯标准库零新依赖)
 - [x] 智能修复建议 (`dq ai suggest-fixes`, 输出可执行清洗配置)
 - [x] 自然语言规则生成 (`dq ai parse-rules`, 直出 RuleValidator 可消费的 YAML)

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/python-≥3.9-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   <img src="https://github.com/M-stars/DQEngine/actions/workflows/ci.yml/badge.svg" alt="CI">
@@ -221,7 +221,7 @@ orchestrator = CleaningOrchestrator()
 result = orchestrator.run("dirty_data.csv", output_path="clean.csv")
 ```
 
-> 详细 API 文档和完整示例参见 [docs/DQEngine使用教程.md](docs/DQEngine使用教程.md)
+> 详细文档参见 [dqengine/docs/](dqengine/docs/)（API、架构、漂移检测、监控、Pipeline、插件开发）
 
 ## 配置指南
 
@@ -513,11 +513,12 @@ DQEngine/
 │   └── utils/            # 工具 — 控制台 / 日志
 │
 ├── configs/
-│   ├── rules.yaml        # 验证规则示例
-│   └── default.yaml      # 默认配置
+│   ├── default.yaml          # 默认配置
+│   ├── rules.yaml            # 验证规则示例
+│   ├── pipeline.yaml         # Pipeline 编排配置
+│   └── schedule_config.yaml  # 调度配置
 │
-├── docs/
-│   └── DQEngine使用教程.md
+├── docs/                 # 模块文档 (API/架构/漂移/监控/Pipeline/插件)
 │
 ├── tests/                # 测试
 ├── pyproject.toml        # 项目配置
@@ -559,11 +560,15 @@ pre-commit install
 
 ## Roadmap
 
+- [x] 数据血缘可视化 (血缘图 HTML 生成)
+- [x] Docker 容器化部署 (Dockerfile + docker-compose)
+- [x] Spark 数据源连接器 (Thrift Server)
+- [x] LLM 集成 (自然语言规则生成 / 智能修复建议)
 - [ ] Web Dashboard — 数据质量监控面板
-- [ ] Data Lineage — 数据血缘可视化
-- [ ] PostgreSQL 深度集成
-- [ ] Docker 容器化部署
-- [ ] Apache Spark 支持
+- [ ] PostgreSQL 深度集成 (存储层)
+- [ ] Redis 缓存层
+
+完整路线图见 [dqengine/README.md](dqengine/README.md)。
 
 ## 贡献
 
