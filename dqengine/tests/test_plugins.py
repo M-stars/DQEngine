@@ -3,9 +3,9 @@
 import pytest
 import pandas as pd
 
-from dqengine.models.schemas import PluginInfo, PluginType, RuleViolation
-from dqengine.plugins.base import BasePlugin, BaseValidator, BaseCleaner, BaseScorer
-from dqengine.registry.plugin_registry import PluginRegistry, get_plugin_registry
+from dqengine.models.schemas import PluginInfo, PluginType
+from dqengine.plugins.base import BaseValidator, BaseCleaner, BaseScorer
+from dqengine.registry.plugin_registry import PluginRegistry
 
 
 class TestBasePlugin:

@@ -136,6 +136,9 @@ class DataLoader:
                 df = pd.read_csv(path, encoding=encoding, **kwargs)
                 logger.debug("CSV 加载成功: %s (编码: %s)", path.name, encoding)
                 return df
+            except pd.errors.EmptyDataError as e:
+                # 空文件与编码无关, 不必重试其他编码
+                raise ValueError(f"文件为空或无有效数据行: {path.name}") from e
             except (UnicodeDecodeError, UnicodeError) as e:
                 # 样本之外才失败的情形仍走全量重试兜底
                 last_error = e

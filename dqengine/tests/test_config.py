@@ -65,7 +65,7 @@ class TestConfigManager:
             config_path = f.name
 
         try:
-            exported = cm.export(config, config_path)
+            cm.export(config, config_path)
             assert Path(config_path).exists()
 
             loaded = cm.load(config_path)

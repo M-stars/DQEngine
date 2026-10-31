@@ -3,9 +3,7 @@
 import json
 import os
 import tempfile
-from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from dqengine.core.loader import DataLoader

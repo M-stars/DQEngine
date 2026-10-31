@@ -62,12 +62,15 @@ class OutlierDetector:
                 iqr = q3 - q1
 
                 if iqr == 0:
-                    continue
-
-                lower = q1 - threshold * iqr
-                upper = q3 + threshold * iqr
-                extreme_lower = q1 - 2 * threshold * iqr
-                extreme_upper = q3 + 2 * threshold * iqr
+                    # 常量列: IQR=0 时任何偏离常量值的样本都是异常值
+                    # (此前直接跳过会漏检 "全 0 计数列混入 9999" 这类场景)
+                    lower = upper = float(q1)
+                    extreme_lower = extreme_upper = float(q1)
+                else:
+                    lower = q1 - threshold * iqr
+                    upper = q3 + threshold * iqr
+                    extreme_lower = q1 - 2 * threshold * iqr
+                    extreme_upper = q3 + 2 * threshold * iqr
             else:  # zscore
                 mean = non_null.mean()
                 std = non_null.std()

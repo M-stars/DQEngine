@@ -1,6 +1,5 @@
 """集成测试 - 端到端数据治理流程."""
 
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -8,24 +7,15 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from dqengine.core.loader import DataLoader
 from dqengine.core.profiler import Profiler
 from dqengine.core.scorer import QualityScorer
 from dqengine.repair.missing_value import MissingValueCleaner
 from dqengine.repair.duplicate import DuplicateCleaner
 from dqengine.repair.date_standardizer import DateStandardizer
 from dqengine.repair.outlier import OutlierDetector
-from dqengine.rules.validator import RuleValidator
 from dqengine.semantic import SemanticDetector
 from dqengine.pipeline import PipelineGenerator
-from dqengine.batch import BatchProcessor
 from dqengine.services.orchestrator import CleaningOrchestrator
-from dqengine.models.schemas import (
-    AppConfig,
-    ProfileResult,
-    QualityScore,
-    RepairResult,
-)
 
 
 class TestIntegrationFullPipeline:
@@ -57,6 +47,7 @@ class TestIntegrationFullPipeline:
     def test_full_cleaning_pipeline(self, sample_df):
         """测试完整清洗流程."""
         original_rows = len(sample_df)
+        assert original_rows > 0
 
         # 重复值
         dup = DuplicateCleaner()
@@ -74,6 +65,7 @@ class TestIntegrationFullPipeline:
         date_std = DateStandardizer()
         df, date_result = date_std.standardize(df)
         assert date_result.operation == "date_standardization"
+        assert 0 < len(df) <= original_rows  # 清洗不增行、不清空
 
         # 异常值检测
         outlier_det = OutlierDetector()

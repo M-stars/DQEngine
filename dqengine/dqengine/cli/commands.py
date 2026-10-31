@@ -257,13 +257,19 @@ def auto(
         task = progress.add_task("[cyan]清洗进行中...", total=None)
 
         orchestrator = CleaningOrchestrator(app_config)
-        result = orchestrator.run(
-            file_path=file,
-            output_path=output,
-            report_path=report,
-            table_name=table,
-            query=query,
-        )
+        try:
+            result = orchestrator.run(
+                file_path=file,
+                output_path=output,
+                report_path=report,
+                table_name=table,
+                query=query,
+            )
+        except typer.Exit:
+            raise
+        except Exception as e:
+            print_error(f"清洗失败: {e}")
+            raise typer.Exit(code=1)
 
         progress.update(task, completed=True, description="[green]清洗完成!")
 
@@ -1199,7 +1205,11 @@ def drift(
     from dqengine.drift.detector import DriftDetector
 
     detector = DriftDetector()
-    report = detector.detect(str(baseline_path), str(current_path))
+    try:
+        report = detector.detect(str(baseline_path), str(current_path))
+    except Exception as e:
+        print_error(f"漂移检测失败: {e}")
+        raise typer.Exit(code=1)
 
     # 汇总显示
     severity_colors = {

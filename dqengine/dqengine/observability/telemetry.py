@@ -33,7 +33,7 @@ class TelemetryManager:
     - Tracing: 执行追踪 (tree spans)
     - Execution Logs: SQLite 持久化
     - Rule Execution Stats: 规则执行统计
-    - Prometheus 接口预留
+    - Prometheus: /metrics 端点 (api/server.py 暴露)
 
     Usage:
         tm = TelemetryManager()
