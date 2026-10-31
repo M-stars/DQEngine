@@ -371,6 +371,28 @@ class AIRuleSet(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
+class RepairIssue(BaseModel):
+    """LLM 识别的单条数据问题及建议动作."""
+
+    column: str
+    issue: str
+    severity: str = "medium"  # high, medium, low
+    action: str  # fill_mean, fill_median, fill_mode, fill_constant, drop_null,
+    #              remove_outliers, flag_outliers, deduplicate, standardize_date, manual
+    params: Dict[str, Any] = Field(default_factory=dict)  # fill_constant 的常量值等
+    reasoning: str = ""
+
+
+class RepairSuggestion(BaseModel):
+    """LLM 智能修复建议集 (含可执行的清洗配置片段)."""
+
+    issues: List[RepairIssue] = Field(default_factory=list)
+    cleaning_config: Dict[str, Any] = Field(default_factory=dict)  # CleaningConfig 兼容片段
+    generated_by: str = ""
+    generation_time_ms: float = 0.0
+    warnings: List[str] = Field(default_factory=list)
+
+
 class AIProviderType(str, Enum):
     """AI Provider 类型."""
 

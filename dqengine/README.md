@@ -324,7 +324,7 @@ docker-compose up -d
 ## 路线图
 
 ### v1.0.0 (当前) — AI-Driven Platform
-- [x] AI 规则生成 (统计推断 + LLM Stub)
+- [x] AI 规则生成 (统计推断 + LLM)
 - [x] 数据漂移检测 (KS/PSI)
 - [x] 持续质量监控 (watchdog + 趋势)
 - [x] REST API Server (FastAPI)
@@ -335,14 +335,14 @@ docker-compose up -d
 - [x] 可观测性系统
 - [x] 企业级架构 (Domain/Application/Infrastructure)
 
-### v0.4.0 — LLM Integration
-- [ ] OpenAI/Ollama Provider 完整实现
-- [ ] 智能修复建议
-- [ ] 自然语言规则生成
+### v1.1.0 — LLM Integration (进行中)
+- [x] OpenAI/Ollama Provider 完整实现 (任意 OpenAI 兼容端点经 `--base-url` 接入, 纯标准库零新依赖)
+- [x] 智能修复建议 (`dq ai suggest-fixes`, 输出可执行清洗配置)
+- [x] 自然语言规则生成 (`dq ai parse-rules`, 直出 RuleValidator 可消费的 YAML)
 - [ ] PostgreSQL 存储实现
 - [ ] Redis 缓存实现
 
-### v1.0.0 — Enterprise Ready
+### v1.2.0 — Enterprise Ready
 - [ ] Web Dashboard
 - [ ] 多租户支持
 - [ ] Kafka 流接入

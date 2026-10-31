@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 import typer
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 from dqengine import __version__
 # 第二阶段模块 — 延迟导入以支持可选依赖
@@ -723,7 +724,7 @@ def plugins(
     if not all_plugins:
         console.print("[dim]未加载任何插件[/dim]")
         console.print()
-        console.print(f"[dim]将自定义插件放入 plugins/ 目录即可自动加载[/dim]")
+        console.print("[dim]将自定义插件放入 plugins/ 目录即可自动加载[/dim]")
     else:
         plugin_rows = []
         for p in all_plugins:
@@ -828,7 +829,7 @@ def doctor() -> None:
     info_rows = [
         ["Python 版本", f"{python_version} {python_status}"],
         ["DQEngine 版本", f"v{__version__}"],
-        ["配置文件", f"[green]已找到[/green]" if config_found else "[yellow]未找到[/yellow]"],
+        ["配置文件", "[green]已找到[/green]" if config_found else "[yellow]未找到[/yellow]"],
         ["已加载插件", f"{len(loaded_plugins)} 个"],
     ]
     console.print(create_table("环境信息", ["项目", "状态"], info_rows))
@@ -881,12 +882,18 @@ def ai_generate_rules(
     file: str = typer.Argument(..., help="数据文件路径"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="保存生成的规则为 YAML"),
     provider: str = typer.Option("heuristic", "--provider", "-p", help="AI Provider: heuristic, openai, ollama"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="LLM 模型名 (缺省 openai=gpt-4o-mini, ollama=qwen2.5)"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API Key (缺省读 DQENGINE_LLM_API_KEY / OPENAI_API_KEY)"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="OpenAI 兼容端点地址 (DeepSeek/Kimi/vLLM 等)"),
+    timeout: float = typer.Option(60.0, "--timeout", help="LLM 请求超时秒数"),
 ) -> None:
     """使用 AI 自动推断数据质量规则.
 
     示例:
         dq ai generate-rules data.csv
         dq ai generate-rules data.csv -o generated_rules.yaml
+        dq ai generate-rules data.csv -p openai -m deepseek-chat --base-url https://api.deepseek.com/v1
+        dq ai generate-rules data.csv -p ollama -m qwen2.5
     """
     path = Path(file)
     if not path.exists():
@@ -910,9 +917,23 @@ def ai_generate_rules(
     if provider == "heuristic":
         generator = HeuristicRuleGenerator()
     else:
-        generator = LLMRuleGenerator(model_name=provider)
+        try:
+            generator = LLMRuleGenerator(
+                provider_name=provider,
+                model_name=model,
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout,
+            )
+        except Exception as e:
+            print_error(str(e))
+            raise typer.Exit(code=1)
 
-    rule_set = generator.generate(df)
+    try:
+        rule_set = generator.generate(df)
+    except Exception as e:
+        print_error(f"LLM 规则生成失败: {e}")
+        raise typer.Exit(code=1)
 
     print_success(f"生成完成: {sum(len(r) for r in rule_set.columns.values())} 条规则 "
                   f"[dim]({rule_set.generation_time_ms:.0f}ms)[/dim]")
@@ -968,6 +989,172 @@ def ai_generate_rules(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(yaml.dump(yaml_rules, allow_unicode=True, default_flow_style=False), encoding="utf-8")
         print_success(f"规则已保存至: {out_path}")
+
+    console.print()
+
+
+@ai_app.command("parse-rules")
+def ai_parse_rules(
+    description: str = typer.Argument(..., help="自然语言规则描述, 如: age 在 0-150 之间, email 必须是有效邮箱"),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="可选: 数据文件, 用于对齐列名"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="保存规则为 YAML (RuleValidator 可直接消费)"),
+    provider: str = typer.Option("openai", "--provider", "-p", help="LLM Provider: openai, ollama"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="LLM 模型名"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API Key (缺省读 DQENGINE_LLM_API_KEY / OPENAI_API_KEY)"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="OpenAI 兼容端点地址"),
+    timeout: float = typer.Option(60.0, "--timeout", help="LLM 请求超时秒数"),
+) -> None:
+    """把自然语言数据质量要求转成验证规则 YAML.
+
+    示例:
+        dq ai parse-rules "age 在 0-150 之间, email 必须是有效邮箱且不能为空" -f data.csv -o rules.yaml
+        dq validate data.csv --rules rules.yaml
+    """
+    import yaml as yaml_mod
+
+    from dqengine.ai.llm import make_provider
+    from dqengine.ai.nl_rules import NLRuleParser
+
+    console.print()
+    console.print(Panel.fit("[bold]自然语言规则生成[/bold]", border_style="cyan"))
+
+    df = None
+    if file:
+        path = Path(file)
+        if not path.exists():
+            print_error(f"文件未找到: {file}")
+            raise typer.Exit(code=1)
+        from dqengine.core.loader import DataLoader
+
+        try:
+            df = DataLoader().load(path)
+        except Exception as e:
+            print_error(f"加载文件失败: {e}")
+            raise typer.Exit(code=1)
+
+    try:
+        llm = make_provider(provider, model=model, api_key=api_key, base_url=base_url, timeout=timeout)
+        parser = NLRuleParser(llm)
+        rules = parser.parse(description, df=df)
+    except Exception as e:
+        print_error(f"规则解析失败: {e}")
+        raise typer.Exit(code=1)
+
+    columns = rules.get("columns", {})
+    if not columns:
+        print_warning("未能从描述中提取出任何规则")
+        for w in parser.warnings:
+            print_warning(w)
+        raise typer.Exit(code=1)
+
+    print_success(f"生成 {len(columns)} 个列的规则:")
+    for col, spec in columns.items():
+        console.print(f"  [bold cyan]{col}[/bold cyan]: [green]{spec}[/green]")
+    for w in parser.warnings:
+        print_warning(w)
+
+    yaml_text = yaml_mod.dump(rules, allow_unicode=True, default_flow_style=False)
+    if output:
+        out_path = Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(yaml_text, encoding="utf-8")
+        print_success(f"规则已保存至: {out_path} (可直接 dq validate --rules 使用)")
+    else:
+        console.print()
+        console.print(yaml_text)
+
+    console.print()
+
+
+@ai_app.command("suggest-fixes")
+def ai_suggest_fixes(
+    file: str = typer.Argument(..., help="数据文件路径"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="保存建议与清洗配置为 YAML"),
+    provider: str = typer.Option("openai", "--provider", "-p", help="LLM Provider: openai, ollama"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="LLM 模型名"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API Key (缺省读 DQENGINE_LLM_API_KEY / OPENAI_API_KEY)"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="OpenAI 兼容端点地址"),
+    timeout: float = typer.Option(60.0, "--timeout", help="LLM 请求超时秒数"),
+) -> None:
+    """让 LLM 分析数据问题并给出修复建议与可执行的清洗配置.
+
+    示例:
+        dq ai suggest-fixes data.csv
+        dq ai suggest-fixes data.csv -p ollama -m qwen2.5 -o fixes.yaml
+    """
+    import yaml as yaml_mod
+
+    from dqengine.ai.llm import make_provider
+    from dqengine.ai.repair_advisor import RepairAdvisor
+
+    path = Path(file)
+    if not path.exists():
+        print_error(f"文件未找到: {file}")
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(Panel.fit(f"[bold]智能修复建议:[/bold] {path.name}", border_style="cyan"))
+
+    from dqengine.core.loader import DataLoader
+
+    try:
+        df = DataLoader().load(path)
+    except Exception as e:
+        print_error(f"加载文件失败: {e}")
+        raise typer.Exit(code=1)
+
+    try:
+        llm = make_provider(provider, model=model, api_key=api_key, base_url=base_url, timeout=timeout)
+        suggestion = RepairAdvisor(llm).suggest(df)
+    except Exception as e:
+        print_error(f"修复建议生成失败: {e}")
+        raise typer.Exit(code=1)
+
+    if not suggestion.issues:
+        print_success("LLM 未识别出明显数据问题")
+    else:
+        table = Table(title=f"识别出 {len(suggestion.issues)} 个问题", border_style="cyan")
+        table.add_column("列", style="cyan")
+        table.add_column("问题")
+        table.add_column("严重度")
+        table.add_column("建议动作", style="green")
+        table.add_column("理由", style="dim")
+        severity_style = {"high": "red", "medium": "yellow", "low": "dim"}
+        for issue in suggestion.issues:
+            table.add_row(
+                issue.column,
+                issue.issue,
+                f"[{severity_style.get(issue.severity, 'white')}]{issue.severity}[/]",
+                issue.action,
+                issue.reasoning,
+            )
+        console.print(table)
+
+    if suggestion.cleaning_config:
+        console.print()
+        console.print("[bold]可执行的清洗配置片段[/bold] [dim](可并入 pipeline/auto 的清洗配置)[/dim]:")
+        from rich.syntax import Syntax
+
+        console.print(
+            Syntax(
+                yaml_mod.dump({"cleaning": suggestion.cleaning_config}, allow_unicode=True, default_flow_style=False),
+                "yaml",
+                theme="ansi_dark",
+            )
+        )
+    for w in suggestion.warnings:
+        print_warning(w)
+
+    if output:
+        out_path = Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "issues": [issue.model_dump() for issue in suggestion.issues],
+            "cleaning_config": suggestion.cleaning_config,
+            "generated_by": suggestion.generated_by,
+        }
+        out_path.write_text(yaml_mod.dump(payload, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+        print_success(f"建议已保存至: {out_path}")
 
     console.print()
 

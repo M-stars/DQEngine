@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
@@ -9,6 +10,8 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from dqengine.ai import llm as llm_module
+from dqengine.ai.llm import LLMAPIError, LLMProviderBase, extract_json
 from dqengine.models.schemas import AIRule, AIRuleSet, AIProviderType
 
 
@@ -170,7 +173,7 @@ class HeuristicRuleGenerator(RuleGeneratorBase):
                 rule_type="nullable",
                 params={"nullable": False, "max_null_rate": 0.0},
                 confidence=0.9,
-                reasoning=f"字段无空值，建议设为必填",
+                reasoning="字段无空值，建议设为必填",
             )
         elif null_rate < 0.1:
             return AIRule(
@@ -278,25 +281,172 @@ class HeuristicRuleGenerator(RuleGeneratorBase):
 
 
 class LLMRuleGenerator(RuleGeneratorBase):
-    """LLM 规则生成器 (Stub) — 为未来 LLM 集成预留接口.
+    """LLM 规则生成器 — 基于列统计画像让大模型推断数据质量规则.
 
-    计划支持的 Provider:
-    - OpenAI (GPT-4, GPT-4o)
-    - Ollama (本地模型)
-    - 自定义本地模型
+    流程: 列画像 (dtype/null率/唯一率/min-max/少量样本) -> 单次 LLM 调用 ->
+    JSON 解析 -> 白名单校验 (只保留验证器可消费的 rule_type) -> AIRuleSet.
+
+    仅发送统计摘要与少量样本值, 不会把整表数据发给 LLM.
+
+    支持的 Provider:
+    - OpenAI 及任意兼容端点 (DeepSeek/Kimi/通义/vLLM, 经 base_url 切换)
+    - Ollama 本地模型
     """
 
     provider_type = AIProviderType.OPENAI
 
-    def __init__(self, model_name: str = "gpt-4o", api_key: Optional[str] = None) -> None:
-        self.model_name = model_name
-        self.api_key = api_key
+    # 与 HeuristicRuleGenerator 输出一致的规则类型白名单
+    SUPPORTED_RULE_TYPES = ("type", "range", "regex", "unique", "nullable", "allowed_values")
+
+    SYSTEM_PROMPT = (
+        "你是数据质量专家。根据给出各列的统计画像, 为每列推断合适的数据质量规则。\n"
+        "只输出一个 JSON 对象, 格式:\n"
+        '{"columns": {"列名": [{"rule_type": "...", "params": {...}, "confidence": 0.0-1.0, "reasoning": "..."}]}}\n'
+        "rule_type 仅限: type / range / regex / unique / nullable / allowed_values。\n"
+        "params 约定: type->expected_type(int|float|str|bool|datetime); "
+        "range->min,max; regex->pattern; unique->should_be_unique(bool); "
+        "nullable->nullable(bool); allowed_values->values(字符串数组)。\n"
+        "不要发明其他 rule_type 或参数键。没有把握的列就少给规则。不要输出 JSON 以外的文字。"
+    )
+
+    def __init__(
+        self,
+        provider: Optional[LLMProviderBase] = None,
+        sample_rows: int = 5,
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        provider_name: str = "openai",
+        timeout: float = 60.0,
+    ) -> None:
+        """provider 缺省时按 provider_name 参数经工厂构造 (CLI 便捷路径)."""
+        if provider is None:
+            provider = llm_module.make_provider(
+                provider_name,
+                model=model_name,
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout,
+            )
+        self.provider = provider
+        self.sample_rows = max(1, sample_rows)
+        self._warnings: List[str] = []
 
     def generate(self, df: pd.DataFrame, columns: Optional[List[str]] = None) -> AIRuleSet:
-        """LLM 规则生成 (未实现)."""
-        return AIRuleSet(
-            columns={},
-            generated_by=f"llm:{self.model_name}",
-            generation_time_ms=0,
-            warnings=["LLM 规则生成器尚未实现，请使用 HeuristicRuleGenerator"],
+        """调用 LLM 从 DataFrame 画像推断数据质量规则."""
+        start_time = time.time()
+        self._warnings = []
+
+        target_columns = [c for c in (columns or list(df.columns))]
+        for col in target_columns:
+            if col not in df.columns:
+                self._warnings.append(f"列 '{col}' 不存在于数据中")
+        valid_columns = [c for c in target_columns if c in df.columns]
+
+        profile = self._build_profile(df, valid_columns)
+        user_prompt = (
+            f"数据共 {len(df)} 行, 需要分析以下列: {json.dumps(valid_columns, ensure_ascii=False)}\n"
+            f"各列统计画像 JSON:\n{json.dumps(profile, ensure_ascii=False)}"
         )
+
+        reply = self.provider.chat(self.SYSTEM_PROMPT, user_prompt, json_mode=True)
+        try:
+            payload = extract_json(reply)
+        except ValueError as e:
+            raise LLMAPIError(f"LLM 返回内容无法解析为规则 JSON: {e}") from e
+
+        rules = self._parse_llm_rules(payload, valid_columns)
+        elapsed = (time.time() - start_time) * 1000
+        return AIRuleSet(
+            columns=rules,
+            generated_by=f"llm:{getattr(self.provider, 'model', self.provider.name)}",
+            generation_time_ms=round(elapsed, 2),
+            warnings=self._warnings,
+        )
+
+    # ------------------------------------------------------------------
+    # 画像构建
+    # ------------------------------------------------------------------
+
+    def _build_profile(self, df: pd.DataFrame, columns: List[str]) -> Dict[str, Dict[str, Any]]:
+        """构建发送给 LLM 的列画像 (统计摘要 + 少量样本值)."""
+        profile: Dict[str, Dict[str, Any]] = {}
+        for col in columns:
+            series = df[col]
+            info: Dict[str, Any] = {
+                "dtype": str(series.dtype),
+                "null_rate": round(float(series.isna().mean()), 4),
+                "unique_rate": round(
+                    float(series.nunique()) / max(len(series.dropna()), 1), 4
+                ),
+            }
+            if pd.api.types.is_numeric_dtype(series):
+                clean = series.dropna()
+                if len(clean):
+                    info["min"] = _json_safe(clean.min())
+                    info["max"] = _json_safe(clean.max())
+                    info["mean"] = round(float(clean.mean()), 4)
+            else:
+                sample = series.dropna().head(self.sample_rows).astype(str).tolist()
+                info["sample_values"] = sample[: self.sample_rows]
+            profile[col] = info
+        return profile
+
+    # ------------------------------------------------------------------
+    # LLM 回复解析
+    # ------------------------------------------------------------------
+
+    def _parse_llm_rules(
+        self, payload: Dict[str, Any], valid_columns: List[str]
+    ) -> Dict[str, List[AIRule]]:
+        """校验并规范化 LLM 返回的规则 (白名单/clamp/未知列警告)."""
+        raw_columns = payload.get("columns")
+        if not isinstance(raw_columns, dict):
+            self._warnings.append("LLM 未返回 columns 结构, 结果为空")
+            return {}
+
+        rules: Dict[str, List[AIRule]] = {}
+        for col, raw_rules in raw_columns.items():
+            if col not in valid_columns:
+                self._warnings.append(f"忽略 LLM 返回的未知列 '{col}'")
+                continue
+            if not isinstance(raw_rules, list):
+                continue
+            col_rules: List[AIRule] = []
+            for item in raw_rules:
+                if not isinstance(item, dict):
+                    continue
+                rule_type = str(item.get("rule_type", "")).strip()
+                if rule_type not in self.SUPPORTED_RULE_TYPES:
+                    self._warnings.append(
+                        f"列 '{col}': 不支持的规则类型 '{rule_type}' 已跳过"
+                    )
+                    continue
+                params = item.get("params")
+                if not isinstance(params, dict):
+                    params = {}
+                try:
+                    confidence = min(1.0, max(0.0, float(item.get("confidence", 0.5))))
+                except (TypeError, ValueError):
+                    confidence = 0.5
+                col_rules.append(
+                    AIRule(
+                        column=col,
+                        rule_type=rule_type,
+                        params=params,
+                        confidence=round(confidence, 2),
+                        reasoning=str(item.get("reasoning", "由 LLM 推断")),
+                    )
+                )
+            if col_rules:
+                rules[col] = col_rules
+        return rules
+
+
+def _json_safe(value: Any) -> Any:
+    """把 numpy/pandas 标量转成可 JSON 序列化的原生类型."""
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    return value

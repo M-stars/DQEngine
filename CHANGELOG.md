@@ -4,6 +4,30 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增：LLM 集成（自然语言驱动的数据质量治理）
+- LLM Provider 层（`dqengine/ai/llm.py`，纯标准库 urllib 零新依赖）：
+  `OpenAIProvider` 支持任意 OpenAI 兼容端点（DeepSeek/Kimi/通义/vLLM，经
+  `--base-url` 切换），`OllamaProvider` 对接本地/远程 Ollama；API Key 解析顺序
+  显式参数 > `DQENGINE_LLM_API_KEY` > `OPENAI_API_KEY`；网络/鉴权/限流错误
+  统一转 `LLMAPIError` 并附排查建议
+- `LLMRuleGenerator` 真实现（替换原 Stub）：列统计画像（dtype/null率/唯一率/
+  min-max/少量样本，不发送整表数据）→ 单次 LLM 调用 → JSON 解析（容忍代码
+  围栏与前后闲聊文本）→ 规则类型白名单校验 + 置信度 clamp + 未知列丢弃并警告；
+  `dq ai generate-rules -p openai|ollama` 新增 `--model/--api-key/--base-url/--timeout`
+- 新增自然语言规则生成 `dq ai parse-rules`：中文/英文数据质量要求直接转成
+  `RuleValidator` 可消费的 YAML（仅 min/max、regex、not_null、allowed_values 四类
+  白名单键，杜绝"生成了规则但验证器静默忽略"的假通过）；可选 `--file` 对齐
+  实际列名
+- 新增智能修复建议 `dq ai suggest-fixes`：Profiler 统计为确定性输入，LLM 仅从
+  动作白名单选建议，清洗配置片段由本地映射合成（防 LLM 结构漂移）；输出与
+  `CleaningConfig` 对齐的可执行配置 + 建议报告 YAML
+- 新增模型 `RepairIssue` / `RepairSuggestion`
+- 新增 tests/test_llm.py（52 例，全 mock 不联网）：Provider 请求构造与错误映射、
+  JSON 提取容错、规则白名单/clamp、NL 规则经 RuleValidator 回环验证（含假通过
+  回归）、CLI 全命令
+
 ## [1.0.0] - 2026-10-31
 
 首个正式发布版本。

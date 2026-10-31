@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dqengine.ai.generator import HeuristicRuleGenerator, LLMRuleGenerator
+from dqengine.ai.generator import HeuristicRuleGenerator
 
 
 class TestHeuristicRuleGenerator:
@@ -97,11 +97,4 @@ class TestHeuristicRuleGenerator:
         assert any("nonexistent" in w for w in result.warnings)
 
 
-class TestLLMRuleGenerator:
-    """LLM 规则生成器 Stub 测试."""
-
-    def test_stub_returns_empty(self):
-        gen = LLMRuleGenerator(model_name="gpt-4o")
-        result = gen.generate(pd.DataFrame({"a": [1, 2, 3]}))
-        assert result.columns == {}
-        assert "尚未实现" in result.warnings[0]
+# LLMRuleGenerator 的真实现测试见 tests/test_llm.py (mock Provider, 不联网)
