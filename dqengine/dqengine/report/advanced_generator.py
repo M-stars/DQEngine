@@ -377,8 +377,8 @@ class AdvancedReportGenerator:
         # 质量评分
         lines.append("## 数据质量评分")
         lines.append("")
-        lines.append(f"| 指标 | 值 |")
-        lines.append(f"|------|----|")
+        lines.append("| 指标 | 值 |")
+        lines.append("|------|----|")
         lines.append(f"| **总分** | **{score.overall_score:.1f} / 100** |")
         lines.append(f"| **等级** | **{score.grade}** |")
         for d in score.dimensions:
@@ -388,8 +388,8 @@ class AdvancedReportGenerator:
         # 数据概览
         lines.append("## 数据概览")
         lines.append("")
-        lines.append(f"| 指标 | 值 |")
-        lines.append(f"|------|----|")
+        lines.append("| 指标 | 值 |")
+        lines.append("|------|----|")
         lines.append(f"| 总行数 | {profile.row_count} |")
         lines.append(f"| 总列数 | {profile.column_count} |")
         lines.append(f"| 总单元格 | {profile.total_cells} |")
@@ -434,7 +434,7 @@ class AdvancedReportGenerator:
             for o in outliers[:20]:
                 lines.append(f"| {o.column} | {o.row_index} | {o.value:.4f} | {o.severity} |")
             if len(outliers) > 20:
-                lines.append(f"| ... | ... | ... | ... |")
+                lines.append("| ... | ... | ... | ... |")
                 lines.append(f"| *共 {len(outliers)} 条, 仅显示前20条* |")
             lines.append("")
 
