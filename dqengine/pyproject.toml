@@ -49,6 +49,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "httpx>=0.24",
     "black>=24.0",
     "ruff>=0.3.0",
     "mypy>=1.8.0",
@@ -94,6 +95,7 @@ monitor = [
 ]
 scheduler = [
     "apscheduler>=3.10.0",
+    "httpx>=0.24",
 ]
 all = [
     "pytest>=8.0",
@@ -120,6 +122,7 @@ all = [
     "python-multipart>=0.0.6",
     "watchdog>=3.0.0",
     "apscheduler>=3.10.0",
+    "httpx>=0.24",
 ]
 
 [project.scripts]

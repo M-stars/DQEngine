@@ -5,9 +5,12 @@ v1.0.0 曾在这些端点上出现必 500 的调用错误, 本文件作为回归
 
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
 
-from dqengine.api.server import create_app
+httpx = pytest.importorskip("httpx", reason="httpx 未安装, fastapi TestClient 不可用")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from dqengine.api.server import create_app  # noqa: E402
 
 
 @pytest.fixture
